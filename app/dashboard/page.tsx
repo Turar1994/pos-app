@@ -5,13 +5,14 @@ import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
 
 type Sale = { id: string; product_name: string; amount: number; payment_type: string; created_at: string; quantity: number }
-type Product = { id: string; name: string; quantity: number }
+type Product = { id: string; name: string; quantity: number; expiry_date?: string }
 
 export default function HomePage() {
   const { store, lang, refresh } = useApp()
   const T = t[lang]
   const [sales, setSales] = useState<Sale[]>([])
   const [lowStock, setLowStock] = useState<Product[]>([])
+  const [expiryWarning, setExpiryWarning] = useState<Product[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => { loadData() }, [store.id, refresh])
@@ -19,20 +20,20 @@ export default function HomePage() {
   async function loadData() {
     const supabase = createClient()
     const today = new Date().toISOString().split('T')[0]
+    const weekLater = new Date()
+    weekLater.setDate(weekLater.getDate() + 7)
+    const weekStr = weekLater.toISOString().split('T')[0]
 
-    const { data: salesData } = await supabase
-      .from('sales').select('*')
-      .eq('store_id', store.id)
-      .gte('created_at', today)
-      .order('created_at', { ascending: false })
-
-    const { data: prodData } = await supabase
-      .from('products').select('*')
-      .eq('store_id', store.id)
-      .lte('quantity', 5)
+    const { data: salesData } = await supabase.from('sales').select('*')
+      .eq('store_id', store.id).gte('created_at', today).order('created_at', { ascending: false })
+    const { data: prodData } = await supabase.from('products').select('*')
+      .eq('store_id', store.id).lte('quantity', 5)
+    const { data: expiryData } = await supabase.from('products').select('*')
+      .eq('store_id', store.id).not('expiry_date', 'is', null).lte('expiry_date', weekStr)
 
     setSales(salesData || [])
     setLowStock(prodData || [])
+    setExpiryWarning(expiryData || [])
     setLoading(false)
   }
 
@@ -65,7 +66,20 @@ export default function HomePage() {
 
       {lowStock.length > 0 && (
         <div className="alert">
-          ⚠️ {T.lowStock}: {lowStock.map(p => `${p.name} (${p.quantity} ${T.pieces})`).join(', ')}
+          📦 {T.lowStock}: {lowStock.map(p => `${p.name} (${p.quantity} ${T.pieces})`).join(', ')}
+        </div>
+      )}
+
+      {expiryWarning.length > 0 && (
+        <div className="alert">
+          ⏰ {lang === 'kz' ? 'Мерзімі бітуге жақын' : 'Срок годности истекает'}:{' '}
+          {expiryWarning.map(p => {
+            const exp = new Date(p.expiry_date!)
+            const now = new Date()
+            const diff = Math.ceil((exp.getTime() - now.getTime()) / (1000 * 60 * 60 * 24))
+            if (diff < 0) return `${p.name} (${lang === 'kz' ? 'өтіп кетті!' : 'уже истёк!'})`
+            return `${p.name} (${diff} ${lang === 'kz' ? 'күн қалды' : 'дн. осталось'})`
+          }).join(', ')}
         </div>
       )}
 
@@ -77,7 +91,7 @@ export default function HomePage() {
           sales.slice(0, 8).map(sale => (
             <div key={sale.id} className="row">
               <div>
-                <div style={{ fontSize: 14 }}>{sale.product_name}</div>
+                <div style={{ fontSize: 14 }}>{sale.product_name} × {sale.quantity}</div>
                 <span className={`badge badge-${sale.payment_type}`}>
                   {sale.payment_type === 'cash' ? T.cash : 'Kaspi'}
                 </span>
