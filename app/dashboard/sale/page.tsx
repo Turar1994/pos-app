@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useApp } from '../layout'
+import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
 
 type Product = { id: string; name: string; price: number; quantity: number }
