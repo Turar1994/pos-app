@@ -10,6 +10,7 @@ export default function StockPage() {
   const { store, lang } = useApp()
   const T = t[lang]
   const [products, setProducts] = useState<Product[]>([])
+  const [search, setSearch] = useState('')
   const [name, setName] = useState('')
   const [price, setPrice] = useState('')
   const [qty, setQty] = useState('')
@@ -38,6 +39,10 @@ export default function StockPage() {
     loadProducts()
   }
 
+  const filtered = products.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase())
+  )
+
   return (
     <div>
       <div className="card">
@@ -55,21 +60,28 @@ export default function StockPage() {
       </div>
 
       <div className="card">
-        <div className="section-title">{T.products}</div>
-        {products.length === 0 ? (
-          <p className="text-muted" style={{ textAlign: 'center', padding: '12px 0' }}>{T.noProducts}</p>
+        <div className="section-title">{T.products} ({filtered.length})</div>
+        <div style={{ marginBottom: 10 }}>
+          <input
+            placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+        {filtered.length === 0 ? (
+          <p className="text-muted" style={{ textAlign: 'center', padding: '12px 0' }}>
+            {search ? (lang === 'kz' ? 'Табылмады' : 'Не найдено') : T.noProducts}
+          </p>
         ) : (
-          products.map(p => (
+          filtered.map(p => (
             <div key={p.id} className="row">
               <div>
                 <div style={{ fontSize: 14 }}>{p.name}</div>
                 <div className="text-muted">{p.price.toLocaleString()} ₸</div>
               </div>
-              <div style={{ textAlign: 'right' }}>
-                <span className={p.quantity <= 5 ? 'badge badge-low' : 'badge badge-cash'}>
-                  {p.quantity} {T.pieces}
-                </span>
-              </div>
+              <span className={p.quantity <= 5 ? 'badge badge-low' : 'badge badge-cash'}>
+                {p.quantity} {T.pieces}
+              </span>
             </div>
           ))
         )}
