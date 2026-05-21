@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
-import { useApp } from './layout'
+import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
 
 type Sale = { id: string; product_name: string; amount: number; payment_type: string; created_at: string; quantity: number }

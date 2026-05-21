@@ -1,14 +1,11 @@
 'use client'
-import { useState, useEffect, createContext, useContext } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase'
 import { t, Lang } from '@/lib/lang'
+import { AppContext } from '@/lib/context'
 
 type Store = { id: string; name: string }
-type AppCtx = { store: Store; lang: Lang; setLang: (l: Lang) => void; refresh: number; triggerRefresh: () => void }
-
-export const AppContext = createContext<AppCtx | null>(null)
-export const useApp = () => useContext(AppContext)!
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -20,9 +17,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [refresh, setRefresh] = useState(0)
   const T = t[lang]
 
-  useEffect(() => {
-    loadStore()
-  }, [])
+  useEffect(() => { loadStore() }, [])
 
   async function loadStore() {
     const supabase = createClient()
