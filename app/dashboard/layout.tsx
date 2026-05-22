@@ -34,7 +34,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
     const { data } = await supabase.from('stores').insert({ name: storeName, user_id: session.user.id }).select().single()
-    if (data) setStore(data)
+    if (data) {
+      setStore(data)
+      // clients кестесінде store_name жаңарту
+      await supabase.from('clients').update({ store_name: storeName, status: 'inactive' })
+        .eq('email', session.user.email!)
+    }
   }
 
   async function logout() {
