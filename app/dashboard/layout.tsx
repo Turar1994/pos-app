@@ -36,15 +36,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const { data } = await supabase.from('stores').insert({ name: storeName, user_id: session.user.id }).select().single()
     if (data) {
       setStore(data)
-      // clients кестесінде store_name жаңарту
-      await supabase.from('clients').update({ store_name: storeName, status: 'inactive' })
-        .eq('email', session.user.email!)
+      await supabase.from('clients').update({ store_name: storeName }).eq('email', session.user.email!)
+      await supabase.from('profiles').update({ store_name: storeName }).eq('id', session.user.id)
     }
   }
 
   async function logout() {
-    const supabase = createClient()
-    await supabase.auth.signOut()
+    await createClient().auth.signOut()
     router.replace('/auth')
   }
 
@@ -69,6 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { path: '/dashboard/sale', label: T.sale, icon: '💰' },
     { path: '/dashboard/stock', label: T.stock, icon: '📦' },
     { path: '/dashboard/report', label: T.report, icon: '📊' },
+    { path: '/dashboard/profile', label: lang === 'kz' ? 'Кабинет' : 'Кабинет', icon: '👤' },
   ]
 
   return (
@@ -86,9 +85,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                   padding: '3px 8px', borderRadius: 99, border: '1px solid #e5e7eb',
                   background: lang === l ? '#f3f4f6' : 'transparent',
                   fontWeight: lang === l ? 600 : 400, cursor: 'pointer', fontSize: 11
-                }}>
-                  {l === 'kz' ? 'ҚАЗ' : 'РУС'}
-                </button>
+                }}>{l === 'kz' ? 'ҚАЗ' : 'РУС'}</button>
               ))}
             </div>
             <button onClick={logout} style={{
@@ -98,9 +95,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </div>
         </div>
 
-        <div style={{ padding: '12px' }}>
-          {children}
-        </div>
+        <div style={{ padding: '12px' }}>{children}</div>
 
         <nav style={{
           position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
@@ -111,12 +106,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             const active = pathname === tab.path
             return (
               <button key={tab.path} onClick={() => router.push(tab.path)} style={{
-                flex: 1, padding: '10px 4px', border: 'none', background: 'transparent',
+                flex: 1, padding: '8px 2px', border: 'none', background: 'transparent',
                 cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
                 borderTop: active ? '2px solid #185FA5' : '2px solid transparent',
-                color: active ? '#185FA5' : '#6b7280', fontSize: 10, fontWeight: active ? 600 : 400
+                color: active ? '#185FA5' : '#6b7280', fontSize: 9, fontWeight: active ? 600 : 400
               }}>
-                <span style={{ fontSize: 18 }}>{tab.icon}</span>
+                <span style={{ fontSize: 17 }}>{tab.icon}</span>
                 {tab.label}
               </button>
             )
