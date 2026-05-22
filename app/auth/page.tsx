@@ -15,37 +15,63 @@ export default function AuthPage() {
   const T = t[lang]
 
   async function handleSubmit() {
-    if (!email || !password) { setError(T.fillAll); return }
-    setLoading(true); setError('')
+    if (!email.trim() || !password.trim()) { 
+      setError(T.fillAll)
+      return 
+    }
+    setLoading(true)
+    setError('')
     const supabase = createClient()
 
     if (isLogin) {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) { setError(T.fillAll); setLoading(false); return }
+      const { data, error: authError } = await supabase.auth.signInWithPassword({ 
+        email: email.trim(), 
+        password 
+      })
+      
+      if (authError || !data.session) { 
+        setError(lang === 'kz' ? 'Email немесе пароль қате' : 'Неверный email или пароль')
+        setLoading(false)
+        return 
+      }
 
       // Блок тексеру
       const { data: client } = await supabase
-        .from('clients').select('status, subscription_end').eq('email', email).single()
+        .from('clients')
+        .select('status, subscription_end')
+        .eq('email', email.trim())
+        .maybeSingle()
 
       if (client) {
-        // Блокталған
         if (client.status === 'blocked') {
           await supabase.auth.signOut()
-          setError(lang === 'kz' ? 'Аккаунтыңыз блокталған. Байланысыңыз: +7 XXX XXX XXXX' : 'Ваш аккаунт заблокирован. Свяжитесь: +7 XXX XXX XXXX')
-          setLoading(false); return
+          setError(lang === 'kz' 
+            ? 'Аккаунтыңыз блокталған. Байланысыңыз: turar.toreniyazov@gmail.com' 
+            : 'Аккаунт заблокирован. Свяжитесь: turar.toreniyazov@gmail.com')
+          setLoading(false)
+          return
         }
-        // Подписка мерзімі өткен
         if (client.subscription_end && new Date(client.subscription_end) < new Date()) {
           await supabase.auth.signOut()
-          setError(lang === 'kz' ? 'Подписка мерзімі өтті. Төлем жасаңыз.' : 'Срок подписки истёк. Произведите оплату.')
-          setLoading(false); return
+          setError(lang === 'kz' 
+            ? 'Подписка мерзімі өтті. Төлем жасаңыз.' 
+            : 'Срок подписки истёк. Произведите оплату.')
+          setLoading(false)
+          return
         }
       }
 
       router.replace('/dashboard')
     } else {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) { setError(error.message); setLoading(false); return }
+      const { error: signUpError } = await supabase.auth.signUp({ 
+        email: email.trim(), 
+        password 
+      })
+      if (signUpError) { 
+        setError(signUpError.message)
+        setLoading(false)
+        return 
+      }
       router.replace('/dashboard')
     }
   }
@@ -72,9 +98,21 @@ export default function AuthPage() {
       </p>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-        <input type="email" placeholder={T.email} value={email} onChange={e => setEmail(e.target.value)} />
-        <input type="password" placeholder={T.password} value={password} onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
+        <input 
+          type="email" 
+          placeholder={T.email} 
+          value={email} 
+          onChange={e => setEmail(e.target.value)}
+          autoComplete="email"
+        />
+        <input 
+          type="password" 
+          placeholder={T.password} 
+          value={password} 
+          onChange={e => setPassword(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
+          autoComplete="current-password"
+        />
       </div>
 
       {error && <p style={{ color: '#D85A30', fontSize: 13, marginBottom: 12 }}>{error}</p>}
@@ -85,7 +123,8 @@ export default function AuthPage() {
 
       <p style={{ textAlign: 'center', marginTop: 16, fontSize: 14, color: '#6b7280' }}>
         {isLogin ? T.noAccount : T.hasAccount}{' '}
-        <span onClick={() => setIsLogin(!isLogin)} style={{ color: '#185FA5', cursor: 'pointer', fontWeight: 500 }}>
+        <span onClick={() => { setIsLogin(!isLogin); setError('') }} 
+          style={{ color: '#185FA5', cursor: 'pointer', fontWeight: 500 }}>
           {isLogin ? T.registerBtn : T.loginBtn}
         </span>
       </p>
