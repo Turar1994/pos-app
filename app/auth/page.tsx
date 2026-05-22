@@ -48,20 +48,34 @@ export default function AuthPage() {
       setLoading(false); return
     }
 
-    // Блок тексеру
+    // Блок тексеру — clients-те жоқ болса да рұқсат жоқ
     const { data: client } = await supabase.from('clients').select('status, subscription_end').eq('email', email).maybeSingle()
-    if (client) {
-      if (client.status === 'blocked') {
-        await supabase.auth.signOut()
-        setError(lang === 'kz' ? 'Аккаунтыңыз блокталған. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт заблокирован. Свяжитесь: turar.toreniyazov@gmail.com')
-        setLoading(false); return
-      }
-      if (client.subscription_end && new Date(client.subscription_end) < new Date()) {
-        await supabase.auth.signOut()
-        setError(lang === 'kz' ? 'Подписка мерзімі өтті. Төлем жасаңыз.' : 'Срок подписки истёк. Произведите оплату.')
-        setLoading(false); return
-      }
+    
+    if (!client) {
+      // clients-те жоқ = жойылған немесе тіркелмеген = рұқсат жоқ
+      await supabase.auth.signOut()
+      setError(lang === 'kz' ? 'Аккаунтыңыз табылмады. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт не найден. Свяжитесь: turar.toreniyazov@gmail.com')
+      setLoading(false); return
     }
+
+    if (client.status === 'blocked') {
+      await supabase.auth.signOut()
+      setError(lang === 'kz' ? 'Аккаунтыңыз блокталған. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт заблокирован. Свяжитесь: turar.toreniyazov@gmail.com')
+      setLoading(false); return
+    }
+
+    if (client.status === 'inactive') {
+      await supabase.auth.signOut()
+      setError(lang === 'kz' ? 'Аккаунтыңыз әлі белсендірілмеген. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт ещё не активирован. Свяжитесь: turar.toreniyazov@gmail.com')
+      setLoading(false); return
+    }
+
+    if (client.subscription_end && new Date(client.subscription_end) < new Date()) {
+      await supabase.auth.signOut()
+      setError(lang === 'kz' ? 'Подписка мерзімі өтті. Төлем жасаңыз.' : 'Срок подписки истёк. Произведите оплату.')
+      setLoading(false); return
+    }
+
     router.replace('/dashboard')
   }
 
