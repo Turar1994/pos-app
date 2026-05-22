@@ -16,17 +16,38 @@ export default function AuthPage() {
 
   async function handleSubmit() {
     if (!email || !password) { setError(T.fillAll); return }
-    setLoading(true)
-    setError('')
+    setLoading(true); setError('')
     const supabase = createClient()
+
     if (isLogin) {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) { setError(error.message); setLoading(false); return }
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) { setError(T.fillAll); setLoading(false); return }
+
+      // Блок тексеру
+      const { data: client } = await supabase
+        .from('clients').select('status, subscription_end').eq('email', email).single()
+
+      if (client) {
+        // Блокталған
+        if (client.status === 'blocked') {
+          await supabase.auth.signOut()
+          setError(lang === 'kz' ? 'Аккаунтыңыз блокталған. Байланысыңыз: +7 XXX XXX XXXX' : 'Ваш аккаунт заблокирован. Свяжитесь: +7 XXX XXX XXXX')
+          setLoading(false); return
+        }
+        // Подписка мерзімі өткен
+        if (client.subscription_end && new Date(client.subscription_end) < new Date()) {
+          await supabase.auth.signOut()
+          setError(lang === 'kz' ? 'Подписка мерзімі өтті. Төлем жасаңыз.' : 'Срок подписки истёк. Произведите оплату.')
+          setLoading(false); return
+        }
+      }
+
+      router.replace('/dashboard')
     } else {
       const { error } = await supabase.auth.signUp({ email, password })
       if (error) { setError(error.message); setLoading(false); return }
+      router.replace('/dashboard')
     }
-    router.replace('/dashboard')
   }
 
   return (
@@ -50,16 +71,10 @@ export default function AuthPage() {
         {isLogin ? T.login : T.register}
       </p>
 
-      <div className="gap" style={{ marginBottom: 16 }}>
-        <input
-          type="email" placeholder={T.email}
-          value={email} onChange={e => setEmail(e.target.value)}
-        />
-        <input
-          type="password" placeholder={T.password}
-          value={password} onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-        />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+        <input type="email" placeholder={T.email} value={email} onChange={e => setEmail(e.target.value)} />
+        <input type="password" placeholder={T.password} value={password} onChange={e => setPassword(e.target.value)}
+          onKeyDown={e => e.key === 'Enter' && handleSubmit()} />
       </div>
 
       {error && <p style={{ color: '#D85A30', fontSize: 13, marginBottom: 12 }}>{error}</p>}
