@@ -8,72 +8,80 @@ export default function AuthPage() {
   const router = useRouter()
   const [lang, setLang] = useState<Lang>('kz')
   const [isLogin, setIsLogin] = useState(true)
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
   const T = t[lang]
 
-  async function handleSubmit() {
-    if (!email.trim() || !password.trim()) { 
-      setError(T.fillAll)
-      return 
-    }
-    setLoading(true)
-    setError('')
+  // Login fields
+  const [loginPhone, setLoginPhone] = useState('')
+  const [loginPassword, setLoginPassword] = useState('')
+
+  // Register fields
+  const [regPhone, setRegPhone] = useState('')
+  const [regPassword, setRegPassword] = useState('')
+  const [regName, setRegName] = useState('')
+  const [regBirth, setRegBirth] = useState('')
+  const [regStore, setRegStore] = useState('')
+  const [regAddress, setRegAddress] = useState('')
+
+  function phoneToEmail(phone: string) {
+    const clean = phone.replace(/\D/g, '')
+    return `${clean}@bazarline.kz`
+  }
+
+  async function handleLogin() {
+    if (!loginPhone || !loginPassword) { setError(T.fillAll); return }
+    setLoading(true); setError('')
     const supabase = createClient()
+    const email = phoneToEmail(loginPhone)
 
-    if (isLogin) {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({ 
-        email: email.trim(), 
-        password 
-      })
-      
-      if (authError || !data.session) { 
-        setError(lang === 'kz' ? 'Email немесе пароль қате' : 'Неверный email или пароль')
-        setLoading(false)
-        return 
-      }
-
-      // Блок тексеру
-      const { data: client } = await supabase
-        .from('clients')
-        .select('status, subscription_end')
-        .eq('email', email.trim())
-        .maybeSingle()
-
-      if (client) {
-        if (client.status === 'blocked') {
-          await supabase.auth.signOut()
-          setError(lang === 'kz' 
-            ? 'Аккаунтыңыз блокталған. Байланысыңыз: turar.toreniyazov@gmail.com' 
-            : 'Аккаунт заблокирован. Свяжитесь: turar.toreniyazov@gmail.com')
-          setLoading(false)
-          return
-        }
-        if (client.subscription_end && new Date(client.subscription_end) < new Date()) {
-          await supabase.auth.signOut()
-          setError(lang === 'kz' 
-            ? 'Подписка мерзімі өтті. Төлем жасаңыз.' 
-            : 'Срок подписки истёк. Произведите оплату.')
-          setLoading(false)
-          return
-        }
-      }
-
-      router.replace('/dashboard')
-    } else {
-      const { error: signUpError } = await supabase.auth.signUp({ 
-        email: email.trim(), 
-        password 
-      })
-      if (signUpError) { 
-        setError(signUpError.message)
-        setLoading(false)
-        return 
-      }
-      router.replace('/dashboard')
+    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password: loginPassword })
+    if (authError || !data.session) {
+      setError(lang === 'kz' ? 'Номер немесе пароль қате' : 'Неверный номер или пароль')
+      setLoading(false); return
     }
+
+    // Блок тексеру
+    const { data: client } = await supabase.from('clients').select('status, subscription_end').eq('email', email).maybeSingle()
+    if (client) {
+      if (client.status === 'blocked') {
+        await supabase.auth.signOut()
+        setError(lang === 'kz' ? 'Аккаунтыңыз блокталған. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт заблокирован. Свяжитесь: turar.toreniyazov@gmail.com')
+        setLoading(false); return
+      }
+      if (client.subscription_end && new Date(client.subscription_end) < new Date()) {
+        await supabase.auth.signOut()
+        setError(lang === 'kz' ? 'Подписка мерзімі өтті. Төлем жасаңыз.' : 'Срок подписки истёк. Произведите оплату.')
+        setLoading(false); return
+      }
+    }
+    router.replace('/dashboard')
+  }
+
+  async function handleRegister() {
+    if (!regPhone || !regPassword || !regName || !regStore) { setError(T.fillAll); return }
+    setLoading(true); setError('')
+    const supabase = createClient()
+    const email = phoneToEmail(regPhone)
+
+    const { data, error: signUpError } = await supabase.auth.signUp({ email, password: regPassword })
+    if (signUpError) {
+      setError(lang === 'kz' ? 'Бұл номер тіркелген' : 'Этот номер уже зарегистрирован')
+      setLoading(false); return
+    }
+
+    if (data.user) {
+      await supabase.from('profiles').upsert({
+        id: data.user.id,
+        full_name: regName,
+        phone: regPhone,
+        birth_date: regBirth || null,
+        store_name: regStore,
+        address: regAddress,
+      })
+      await supabase.from('clients').update({ store_name: regStore, phone: regPhone }).eq('email', email)
+    }
+    router.replace('/dashboard')
   }
 
   return (
@@ -85,45 +93,55 @@ export default function AuthPage() {
               padding: '4px 12px', borderRadius: 99, border: '1px solid #e5e7eb',
               background: lang === l ? '#f3f4f6' : 'transparent',
               fontWeight: lang === l ? 600 : 400, cursor: 'pointer', fontSize: 13
-            }}>
-              {l === 'kz' ? 'ҚАЗ' : 'РУС'}
-            </button>
+            }}>{l === 'kz' ? 'ҚАЗ' : 'РУС'}</button>
           ))}
         </div>
       </div>
 
       <h1 style={{ fontSize: 22, fontWeight: 600, marginBottom: 8 }}>{T.appName}</h1>
-      <p style={{ color: '#6b7280', marginBottom: 32, fontSize: 14 }}>
+      <p style={{ color: '#6b7280', marginBottom: 24, fontSize: 14 }}>
         {isLogin ? T.login : T.register}
       </p>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
-        <input 
-          type="email" 
-          placeholder={T.email} 
-          value={email} 
-          onChange={e => setEmail(e.target.value)}
-          autoComplete="email"
-        />
-        <input 
-          type="password" 
-          placeholder={T.password} 
-          value={password} 
-          onChange={e => setPassword(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && handleSubmit()}
-          autoComplete="current-password"
-        />
-      </div>
+      {isLogin ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input placeholder={lang === 'kz' ? 'Телефон номері (+7...)' : 'Номер телефона (+7...)'}
+            value={loginPhone} onChange={e => setLoginPhone(e.target.value)} />
+          <input type="password" placeholder={T.password}
+            value={loginPassword} onChange={e => setLoginPassword(e.target.value)}
+            onKeyDown={e => e.key === 'Enter' && handleLogin()} />
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <input placeholder={lang === 'kz' ? 'Телефон номері (+7...)' : 'Номер телефона (+7...)'}
+            value={regPhone} onChange={e => setRegPhone(e.target.value)} />
+          <input placeholder={lang === 'kz' ? 'Аты-жөні' : 'ФИО'}
+            value={regName} onChange={e => setRegName(e.target.value)} />
+          <div>
+            <label style={{ fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block' }}>
+              {lang === 'kz' ? 'Туған күні' : 'Дата рождения'}
+            </label>
+            <input type="date" value={regBirth} onChange={e => setRegBirth(e.target.value)} />
+          </div>
+          <input placeholder={lang === 'kz' ? 'Дүкен аты *' : 'Название магазина *'}
+            value={regStore} onChange={e => setRegStore(e.target.value)} />
+          <input placeholder={lang === 'kz' ? 'Мекен-жай' : 'Адрес'}
+            value={regAddress} onChange={e => setRegAddress(e.target.value)} />
+          <input type="password" placeholder={lang === 'kz' ? 'Пароль (кемінде 6 таңба)' : 'Пароль (минимум 6 символов)'}
+            value={regPassword} onChange={e => setRegPassword(e.target.value)} />
+        </div>
+      )}
 
-      {error && <p style={{ color: '#D85A30', fontSize: 13, marginBottom: 12 }}>{error}</p>}
+      {error && <p style={{ color: '#D85A30', fontSize: 13, margin: '12px 0 0' }}>{error}</p>}
 
-      <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
+      <button className="btn btn-primary" onClick={isLogin ? handleLogin : handleRegister}
+        disabled={loading} style={{ marginTop: 16, width: '100%' }}>
         {loading ? T.loading : isLogin ? T.loginBtn : T.registerBtn}
       </button>
 
       <p style={{ textAlign: 'center', marginTop: 16, fontSize: 14, color: '#6b7280' }}>
         {isLogin ? T.noAccount : T.hasAccount}{' '}
-        <span onClick={() => { setIsLogin(!isLogin); setError('') }} 
+        <span onClick={() => { setIsLogin(!isLogin); setError('') }}
           style={{ color: '#185FA5', cursor: 'pointer', fontWeight: 500 }}>
           {isLogin ? T.registerBtn : T.loginBtn}
         </span>
