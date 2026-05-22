@@ -12,11 +12,8 @@ export default function AuthPage() {
   const [error, setError] = useState('')
   const T = t[lang]
 
-  // Login fields
   const [loginPhone, setLoginPhone] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
-
-  // Register fields
   const [regPhone, setRegPhone] = useState('')
   const [regPassword, setRegPassword] = useState('')
   const [regName, setRegName] = useState('')
@@ -25,7 +22,10 @@ export default function AuthPage() {
   const [regAddress, setRegAddress] = useState('')
 
   function phoneToEmail(phone: string) {
-    const clean = phone.replace(/\D/g, '')
+    let clean = phone.replace(/\D/g, '')
+    if (clean.startsWith('8')) clean = '7' + clean.slice(1)
+    if (clean.length === 10) clean = '7' + clean
+    if (clean.length > 11) clean = clean.slice(-11)
     return `${clean}@bazarline.kz`
   }
 
@@ -34,14 +34,11 @@ export default function AuthPage() {
     setLoading(true); setError('')
     const supabase = createClient()
     const email = phoneToEmail(loginPhone)
-
     const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password: loginPassword })
     if (authError || !data.session) {
       setError(lang === 'kz' ? 'Номер немесе пароль қате' : 'Неверный номер или пароль')
       setLoading(false); return
     }
-
-    // Блок тексеру
     const { data: client } = await supabase.from('clients').select('status, subscription_end').eq('email', email).maybeSingle()
     if (client) {
       if (client.status === 'blocked') {
@@ -63,21 +60,15 @@ export default function AuthPage() {
     setLoading(true); setError('')
     const supabase = createClient()
     const email = phoneToEmail(regPhone)
-
     const { data, error: signUpError } = await supabase.auth.signUp({ email, password: regPassword })
     if (signUpError) {
       setError(lang === 'kz' ? 'Бұл номер тіркелген' : 'Этот номер уже зарегистрирован')
       setLoading(false); return
     }
-
     if (data.user) {
       await supabase.from('profiles').upsert({
-        id: data.user.id,
-        full_name: regName,
-        phone: regPhone,
-        birth_date: regBirth || null,
-        store_name: regStore,
-        address: regAddress,
+        id: data.user.id, full_name: regName, phone: regPhone,
+        birth_date: regBirth || null, store_name: regStore, address: regAddress,
       })
       await supabase.from('clients').update({ store_name: regStore, phone: regPhone }).eq('email', email)
     }
