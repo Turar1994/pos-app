@@ -26,7 +26,7 @@ export default function AuthPage() {
     if (clean.startsWith('8')) clean = '7' + clean.slice(1)
     if (clean.length === 10) clean = '7' + clean
     if (clean.length > 11) clean = clean.slice(-11)
-    return `${clean}@bazarline.kz`
+    return `${clean}@pos.kz`
   }
 
   async function handleLogin() {
