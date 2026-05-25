@@ -35,7 +35,7 @@ export default function DebtsPage() {
   }
 
   async function markPaid(id: string) {
-    await createClient().from('debts').update({ is_paid: true }).eq('id', id)
+    await createClient().from('debts').update({ is_paid: true, paid_at: new Date().toISOString() }).eq('id', id)
     loadDebts()
   }
 
