@@ -49,12 +49,17 @@ export default function AuthPage() {
     }
 
     // Блок тексеру — clients-те жоқ болса да рұқсат жоқ
-    const { data: client } = await supabase.from('clients').select('status, subscription_end').eq('email', email).maybeSingle()
+    const { data: client } = await supabase.from('clients').select('status, subscription_end, deleted_at').eq('email', email).maybeSingle()
     
     if (!client) {
-      // clients-те жоқ = жойылған немесе тіркелмеген = рұқсат жоқ
       await supabase.auth.signOut()
       setError(lang === 'kz' ? 'Аккаунтыңыз табылмады. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт не найден. Свяжитесь: turar.toreniyazov@gmail.com')
+      setLoading(false); return
+    }
+
+    if (client.deleted_at) {
+      await supabase.auth.signOut()
+      setError(lang === 'kz' ? 'Аккаунтыңыз жойылған. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт удалён. Свяжитесь: turar.toreniyazov@gmail.com')
       setLoading(false); return
     }
 
