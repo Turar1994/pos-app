@@ -25,23 +25,35 @@ export default function HomePage() {
     const weekLater = new Date(); weekLater.setDate(weekLater.getDate() + 7)
     const weekStr = weekLater.toISOString().split('T')[0]
 
-    const [salesRes, debtsRes, prodRes, expiryRes] = await Promise.all([
+    const [salesRes, debtsRes, paidDebtsRes, prodRes, expiryRes] = await Promise.all([
       supabase.from('sales').select('*').eq('store_id', store.id).gte('created_at', today).order('created_at', { ascending: false }),
       supabase.from('debts').select('*').eq('store_id', store.id).eq('is_paid', false).order('created_at', { ascending: false }),
+      supabase.from('debts').select('*').eq('store_id', store.id).eq('is_paid', true).gte('paid_at', today).order('paid_at', { ascending: false }),
       supabase.from('products').select('*').eq('store_id', store.id).lte('quantity', 5),
       supabase.from('products').select('*').eq('store_id', store.id).not('expiry_date', 'is', null).lte('expiry_date', weekStr)
     ])
 
     setSales(salesRes.data || [])
     setDebts(debtsRes.data || [])
+    // Төленген қарыздарды бүгінгі сатылымдарға қосу
+    const paidToday = (paidDebtsRes.data || []).map((d: any) => ({
+      id: d.id, product_name: d.product_name, amount: d.amount,
+      payment_type: 'debt_paid', quantity: d.quantity || 1,
+      created_at: d.paid_at, is_debt: true, debtor_name: d.debtor_name
+    }))
+    setSales(prev => [...(salesRes.data || []).map((s: any) => ({...s, is_debt: false, debtor_name: ''})), ...paidToday]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) as any)
     setLowStock(prodRes.data || [])
     setExpiryWarning(expiryRes.data || [])
     setLoading(false)
   }
 
+  const regularSales = sales.filter((x: any) => !x.is_debt)
+  const paidDebtSales = sales.filter((x: any) => x.is_debt)
   const totalRevenue = sales.reduce((s, x) => s + x.amount, 0)
-  const cashTotal = sales.filter(x => x.payment_type === 'cash').reduce((s, x) => s + x.amount, 0)
-  const kaspiTotal = sales.filter(x => x.payment_type === 'kaspi').reduce((s, x) => s + x.amount, 0)
+  const cashTotal = regularSales.filter((x: any) => x.payment_type === 'cash').reduce((s: number, x: any) => s + x.amount, 0)
+  const kaspiTotal = regularSales.filter((x: any) => x.payment_type === 'kaspi').reduce((s: number, x: any) => s + x.amount, 0)
+  const paidDebtTotal = paidDebtSales.reduce((s: number, x: any) => s + x.amount, 0)
   const today = new Date().toISOString().split('T')[0]
   const overdueDebts = debts.filter(d => d.due_date && new Date(d.due_date) < new Date())
   const totalDebt = debts.reduce((s, d) => s + d.amount, 0)
