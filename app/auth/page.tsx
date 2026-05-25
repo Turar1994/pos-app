@@ -102,7 +102,13 @@ export default function AuthPage() {
       })
       await supabase.from("clients").update({ store_name: regStore, phone: regPhone, full_name: regName, birth_date: regBirth || null, address: regAddress }).eq("email", email)
     }
-    router.replace('/dashboard')
+    // Тіркелгеннен кейін автоматты кірмейміз — админ белсендіруін күтеміз
+    await supabase.auth.signOut()
+    setError(lang === 'kz' 
+      ? '✅ Тіркелу сәтті! Кіру үшін админ белсендіруін күтіңіз. Байланысыңыз: turar.toreniyazov@gmail.com' 
+      : '✅ Регистрация успешна! Ожидайте активации от администратора. Контакт: turar.toreniyazov@gmail.com')
+    setLoading(false)
+    setIsLogin(true)
   }
 
   return (
