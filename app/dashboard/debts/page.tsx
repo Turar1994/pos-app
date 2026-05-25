@@ -1,1 +1,229 @@
+'use client'
+import { useEffect, useState } from 'react'
+import { createClient } from '@/lib/supabase'
+import { useApp } from '@/lib/context'
+import { t } from '@/lib/lang'
 
+type Debt = {
+  id: string
+  product_name: string
+  amount: number
+  debtor_name: string
+  debtor_phone: string
+  debt_date: string
+  due_date: string | null
+  is_paid: boolean
+  created_at: string
+}
+
+export default function DebtsPage() {
+  const { store, lang } = useApp()
+  const T = t[lang]
+  const [debts, setDebts] = useState<Debt[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
+  const [filter, setFilter] = useState<'all' | 'unpaid' | 'paid'>('unpaid')
+
+  const [form, setForm] = useState({
+    product_name: '', amount: '', debtor_name: '',
+    debtor_phone: '', due_date: ''
+  })
+
+  useEffect(() => { loadDebts() }, [store.id])
+
+  async function loadDebts() {
+    const supabase = createClient()
+    const { data } = await supabase.from('debts').select('*')
+      .eq('store_id', store.id).order('created_at', { ascending: false })
+    setDebts(data || [])
+    setLoading(false)
+  }
+
+  async function addDebt() {
+    if (!form.debtor_name || !form.amount) return
+    const supabase = createClient()
+    await supabase.from('debts').insert({
+      store_id: store.id,
+      product_name: form.product_name,
+      amount: parseFloat(form.amount),
+      debtor_name: form.debtor_name,
+      debtor_phone: form.debtor_phone,
+      due_date: form.due_date || null,
+      is_paid: false
+    })
+    setForm({ product_name: '', amount: '', debtor_name: '', debtor_phone: '', due_date: '' })
+    setShowAdd(false)
+    loadDebts()
+  }
+
+  async function markPaid(id: string) {
+    await createClient().from('debts').update({ is_paid: true }).eq('id', id)
+    loadDebts()
+  }
+
+  async function deleteDebt(id: string) {
+    if (!confirm(lang === 'kz' ? 'Жоюға сенімдісіз бе?' : 'Вы уверены?')) return
+    await createClient().from('debts').delete().eq('id', id)
+    loadDebts()
+  }
+
+  function isOverdue(due: string | null) {
+    if (!due) return false
+    return new Date(due) < new Date()
+  }
+
+  function isDueSoon(due: string | null) {
+    if (!due) return false
+    const diff = (new Date(due).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
+    return diff >= 0 && diff <= 3
+  }
+
+  const filtered = debts.filter(d => {
+    if (filter === 'unpaid') return !d.is_paid
+    if (filter === 'paid') return d.is_paid
+    return true
+  })
+
+  const overdueCount = debts.filter(d => !d.is_paid && isOverdue(d.due_date)).length
+  const totalUnpaid = debts.filter(d => !d.is_paid).reduce((s, d) => s + d.amount, 0)
+
+  if (loading) return <p className="text-muted">{T.loading}</p>
+
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <h2 style={{ fontSize: 18, fontWeight: 600 }}>
+          {lang === 'kz' ? 'Қарыздар' : 'Долги'}
+        </h2>
+        <button className="btn btn-primary" onClick={() => setShowAdd(!showAdd)}>
+          + {lang === 'kz' ? 'Қарыз қосу' : 'Добавить долг'}
+        </button>
+      </div>
+
+      {/* Статистика */}
+      <div className="stat-grid" style={{ marginBottom: 12 }}>
+        <div className="stat-card">
+          <div className="stat-label">{lang === 'kz' ? 'Жалпы қарыз' : 'Всего долгов'}</div>
+          <div className="stat-value text-red">{totalUnpaid.toLocaleString()} ₸</div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-label">{lang === 'kz' ? 'Мерзімі өткен' : 'Просроченных'}</div>
+          <div className="stat-value" style={{ color: overdueCount > 0 ? '#D85A30' : '#0F6E56' }}>{overdueCount}</div>
+        </div>
+      </div>
+
+      {overdueCount > 0 && (
+        <div className="alert">
+          ⚠️ {lang === 'kz' ? `${overdueCount} қарыздың мерзімі өтіп кетті!` : `${overdueCount} долгов просрочено!`}
+        </div>
+      )}
+
+      {showAdd && (
+        <div className="card" style={{ border: '2px solid #185FA5', marginBottom: 12 }}>
+          <div className="section-title">{lang === 'kz' ? 'Жаңа қарыз' : 'Новый долг'}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div className="row-2">
+              <input placeholder={lang === 'kz' ? 'Қарыз алушы аты *' : 'Имя должника *'}
+                value={form.debtor_name} onChange={e => setForm({ ...form, debtor_name: e.target.value })} />
+              <input placeholder={lang === 'kz' ? 'Телефон' : 'Телефон'}
+                value={form.debtor_phone} onChange={e => setForm({ ...form, debtor_phone: e.target.value })} />
+            </div>
+            <div className="row-2">
+              <input placeholder={lang === 'kz' ? 'Товар/себеп' : 'Товар/причина'}
+                value={form.product_name} onChange={e => setForm({ ...form, product_name: e.target.value })} />
+              <input type="number" placeholder={lang === 'kz' ? 'Сома (₸) *' : 'Сумма (₸) *'}
+                value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+            </div>
+            <div>
+              <label style={{ fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block' }}>
+                {lang === 'kz' ? 'Қайтару мерзімі' : 'Срок возврата'}
+              </label>
+              <input type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} />
+            </div>
+            <div className="row-2">
+              <button className="btn btn-primary" onClick={addDebt}>
+                {lang === 'kz' ? 'Қосу' : 'Добавить'}
+              </button>
+              <button className="btn" onClick={() => setShowAdd(false)}>
+                {lang === 'kz' ? 'Болдырмау' : 'Отмена'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Фильтр */}
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+        {[
+          { key: 'unpaid', kz: 'Төленбеген', ru: 'Не оплачено' },
+          { key: 'paid', kz: 'Төленген', ru: 'Оплачено' },
+          { key: 'all', kz: 'Барлығы', ru: 'Все' },
+        ].map(f => (
+          <button key={f.key} onClick={() => setFilter(f.key as any)} style={{
+            padding: '6px 14px', borderRadius: 6, border: '1px solid #e5e7eb',
+            background: filter === f.key ? '#185FA5' : '#fff',
+            color: filter === f.key ? '#fff' : '#6b7280',
+            cursor: 'pointer', fontSize: 13
+          }}>
+            {lang === 'kz' ? f.kz : f.ru}
+          </button>
+        ))}
+      </div>
+
+      {/* Тізім */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {filtered.length === 0 ? (
+          <div className="card" style={{ textAlign: 'center', color: '#6b7280' }}>
+            {lang === 'kz' ? 'Қарыз жоқ' : 'Долгов нет'}
+          </div>
+        ) : filtered.map(d => {
+          const overdue = !d.is_paid && isOverdue(d.due_date)
+          const dueSoon = !d.is_paid && isDueSoon(d.due_date)
+          return (
+            <div key={d.id} className="card" style={{
+              padding: 14,
+              borderLeft: `4px solid ${d.is_paid ? '#0F6E56' : overdue ? '#D85A30' : dueSoon ? '#D97706' : '#185FA5'}`
+            }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontWeight: 600, fontSize: 15 }}>{d.debtor_name}</span>
+                    {d.is_paid
+                      ? <span className="badge badge-active">✅ {lang === 'kz' ? 'Төленді' : 'Оплачено'}</span>
+                      : overdue
+                        ? <span className="badge badge-low">❌ {lang === 'kz' ? 'Мерзімі өтті' : 'Просрочено'}</span>
+                        : dueSoon
+                          ? <span className="badge" style={{ background: '#FEF3C7', color: '#92400E' }}>⚠️ {lang === 'kz' ? 'Жақын арада' : 'Скоро'}</span>
+                          : null
+                    }
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', fontSize: 13, color: '#6b7280' }}>
+                    {d.debtor_phone && <span>📞 {d.debtor_phone}</span>}
+                    {d.product_name && <span>📦 {d.product_name}</span>}
+                    <span>📅 {new Date(d.created_at).toLocaleDateString('kk-KZ')}</span>
+                    {d.due_date && <span style={{ color: overdue ? '#D85A30' : '#6b7280' }}>
+                      ⏰ {lang === 'kz' ? 'Мерзімі' : 'До'}: {new Date(d.due_date).toLocaleDateString('kk-KZ')}
+                    </span>}
+                  </div>
+                </div>
+                <div style={{ textAlign: 'right', marginLeft: 12 }}>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: d.is_paid ? '#0F6E56' : '#D85A30' }}>
+                    {d.amount.toLocaleString()} ₸
+                  </div>
+                  <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+                    {!d.is_paid && (
+                      <button className="btn btn-sm btn-success" onClick={() => markPaid(d.id)}>
+                        ✓ {lang === 'kz' ? 'Төленді' : 'Оплачено'}
+                      </button>
+                    )}
+                    <button className="btn btn-sm btn-danger" onClick={() => deleteDebt(d.id)}>🗑</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
