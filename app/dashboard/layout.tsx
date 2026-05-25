@@ -67,6 +67,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { path: '/dashboard/sale', label: T.sale, icon: '💰' },
     { path: '/dashboard/stock', label: T.stock, icon: '📦' },
     { path: '/dashboard/report', label: T.report, icon: '📊' },
+    { path: '/dashboard/debts', label: lang === 'kz' ? 'Қарыз' : 'Долги', icon: '💳' },
     { path: '/dashboard/profile', label: lang === 'kz' ? 'Кабинет' : 'Кабинет', icon: '👤' },
   ]
 
