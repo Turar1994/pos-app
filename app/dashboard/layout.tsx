@@ -17,7 +17,43 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [refresh, setRefresh] = useState(0)
   const T = t[lang]
 
+  const [blocked, setBlocked] = useState<string | null>(null)
+
   useEffect(() => { loadStore() }, [])
+
+  // Әр 60 секунд сайын статусты тексеру
+  useEffect(() => {
+    const interval = setInterval(checkStatus, 60000)
+    return () => clearInterval(interval)
+  }, [])
+
+  async function checkStatus() {
+    const supabase = createClient()
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) { router.replace('/auth'); return }
+    const { data: client } = await supabase.from('clients')
+      .select('status, subscription_end, deleted_at')
+      .eq('email', session.user.email!)
+      .maybeSingle()
+    if (!client || client.deleted_at) {
+      await supabase.auth.signOut()
+      router.replace('/auth')
+      return
+    }
+    if (client.status === 'blocked') {
+      setBlocked(lang === 'kz' ? 'Аккаунтыңыз блокталған. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт заблокирован. Свяжитесь: turar.toreniyazov@gmail.com')
+      return
+    }
+    if (client.status === 'inactive') {
+      setBlocked(lang === 'kz' ? 'Аккаунтыңыз белсендірілмеген. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт деактивирован. Свяжитесь: turar.toreniyazov@gmail.com')
+      return
+    }
+    if (client.subscription_end && new Date(client.subscription_end) < new Date()) {
+      setBlocked(lang === 'kz' ? 'Подписка мерзімі өтті. Төлем жасаңыз: turar.toreniyazov@gmail.com' : 'Срок подписки истёк. Оплатите: turar.toreniyazov@gmail.com')
+      return
+    }
+    setBlocked(null)
+  }
 
   async function loadStore() {
     const supabase = createClient()
@@ -25,6 +61,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     if (!session) { router.replace('/auth'); return }
     const { data } = await supabase.from('stores').select('*').eq('user_id', session.user.id).single()
     if (data) setStore(data)
+    await checkStatus()
     setLoading(false)
   }
 
@@ -49,6 +86,31 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (loading) return (
     <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
       <p className="text-muted">{T.loading}</p>
+    </div>
+  )
+
+  if (blocked) return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'rgba(0,0,0,0.85)', zIndex: 9999,
+      display: 'flex', flexDirection: 'column',
+      justifyContent: 'center', alignItems: 'center',
+      padding: 24, textAlign: 'center'
+    }}>
+      <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+      <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
+        {lang === 'kz' ? 'Қатынас жабық' : 'Доступ закрыт'}
+      </h2>
+      <p style={{ color: '#e5e7eb', fontSize: 14, maxWidth: 300, lineHeight: 1.6 }}>
+        {blocked}
+      </p>
+      <button onClick={logout} style={{
+        marginTop: 24, padding: '10px 24px',
+        background: '#D85A30', color: '#fff',
+        border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14
+      }}>
+        {lang === 'kz' ? 'Шығу' : 'Выйти'}
+      </button>
     </div>
   )
 
