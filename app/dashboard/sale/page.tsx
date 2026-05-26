@@ -4,22 +4,35 @@ import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
 
-type Product = { id: string; name: string; price: number; quantity: number }
-type Sale = { id: string; product_name: string; amount: number; payment_type: string; quantity: number; created_at: string; is_debt?: boolean; debtor_name?: string }
+type Product = { id: string; name: string; price: number; quantity: number; unit?: string; category?: string }
+type CartItem = { product: Product; qty: number; amount: number }
+
+const CATEGORIES = [
+  { key: 'all', kz: 'Барлығы', ru: 'Все', icon: '📋' },
+  { key: 'drinks', kz: 'Сусындар', ru: 'Напитки', icon: '🥤' },
+  { key: 'bread', kz: 'Нан', ru: 'Хлеб', icon: '🍞' },
+  { key: 'dairy', kz: 'Сүт', ru: 'Молочные', icon: '🥛' },
+  { key: 'sweets', kz: 'Тәттілер', ru: 'Сладости', icon: '🍫' },
+  { key: 'meat', kz: 'Ет', ru: 'Мясо', icon: '🥩' },
+  { key: 'fruits', kz: 'Жемістер', ru: 'Фрукты', icon: '🍎' },
+  { key: 'vegetables', kz: 'Көкөністер', ru: 'Овощи', icon: '🥦' },
+  { key: 'grocery', kz: 'Бакалея', ru: 'Бакалея', icon: '🍜' },
+  { key: 'hygiene', kz: 'Тазалық', ru: 'Гигиена', icon: '🧴' },
+  { key: 'other', kz: 'Басқа', ru: 'Другое', icon: '📦' },
+]
 
 export default function SalePage() {
   const { store, lang, triggerRefresh } = useApp()
   const T = t[lang]
   const [products, setProducts] = useState<Product[]>([])
-  const [sales, setSales] = useState<Sale[]>([])
+  const [cart, setCart] = useState<CartItem[]>([])
   const [search, setSearch] = useState('')
-  const [showList, setShowList] = useState(false)
-  const [selectedId, setSelectedId] = useState('')
-  const [qty, setQty] = useState(1)
+  const [selectedCat, setSelectedCat] = useState('all')
   const [payType, setPayType] = useState<'cash' | 'kaspi'>('cash')
-  const [error, setError] = useState('')
-  const [success, setSuccess] = useState('')
   const [loading, setLoading] = useState(false)
+  const [success, setSuccess] = useState('')
+  const [kgModal, setKgModal] = useState<Product | null>(null)
+  const [kgValue, setKgValue] = useState('')
 
   // Қарыз формасы
   const [showDebtForm, setShowDebtForm] = useState(false)
@@ -27,163 +40,221 @@ export default function SalePage() {
   const [debtorPhone, setDebtorPhone] = useState('')
   const [dueDate, setDueDate] = useState('')
 
-  useEffect(() => { loadData() }, [store.id])
+  useEffect(() => { loadProducts() }, [store.id])
 
-  async function loadData() {
+  async function loadProducts() {
     const supabase = createClient()
-    const { data: prods } = await supabase.from('products').select('*').eq('store_id', store.id).gt('quantity', 0).order('name')
-    const today = new Date().toISOString().split('T')[0]
-    const { data: salesData } = await supabase.from('sales').select('*').eq('store_id', store.id).gte('created_at', today).order('created_at', { ascending: false })
-    // Бүгінгі қарыздар
-    const { data: debtsData } = await supabase.from('debts').select('*').eq('store_id', store.id).gte('created_at', today).order('created_at', { ascending: false })
-    
-    setProducts(prods || [])
-    const allSales = [
-      ...(salesData || []).map(s => ({ ...s, is_debt: false })),
-      ...(debtsData || []).map(d => ({
-        id: d.id, product_name: d.product_name, amount: d.amount,
-        payment_type: 'debt', quantity: d.quantity || 1,
-        created_at: d.created_at, is_debt: true, debtor_name: d.debtor_name
-      }))
-    ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-    setSales(allSales)
+    const { data } = await supabase.from('products').select('*').eq('store_id', store.id).gt('quantity', 0).order('name')
+    setProducts(data || [])
   }
 
-  const filtered = search
-    ? products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()))
-    : products
+  function addToCart(product: Product) {
+    if (product.unit === 'кг') {
+      setKgModal(product)
+      setKgValue('')
+      return
+    }
+    const existing = cart.find(c => c.product.id === product.id)
+    if (existing) {
+      if (existing.qty >= product.quantity) return
+      setCart(cart.map(c => c.product.id === product.id
+        ? { ...c, qty: c.qty + 1, amount: (c.qty + 1) * product.price }
+        : c))
+    } else {
+      setCart([...cart, { product, qty: 1, amount: product.price }])
+    }
+  }
 
-  const selected = products.find(p => p.id === selectedId)
-  const totalPrice = selected ? selected.price * qty : 0
+  function addKgToCart() {
+    if (!kgModal || !kgValue) return
+    const qty = parseFloat(kgValue)
+    if (isNaN(qty) || qty <= 0) return
+    const existing = cart.find(c => c.product.id === kgModal.id)
+    if (existing) {
+      setCart(cart.map(c => c.product.id === kgModal!.id
+        ? { ...c, qty: c.qty + qty, amount: (c.qty + qty) * kgModal!.price }
+        : c))
+    } else {
+      setCart([...cart, { product: kgModal, qty, amount: qty * kgModal.price }])
+    }
+    setKgModal(null); setKgValue('')
+  }
+
+  function removeFromCart(id: string) {
+    setCart(cart.filter(c => c.product.id !== id))
+  }
+
+  function updateQty(id: string, delta: number) {
+    setCart(cart.map(c => {
+      if (c.product.id !== id) return c
+      const newQty = c.product.unit === 'кг' ? c.qty : Math.max(1, c.qty + delta)
+      if (newQty > c.product.quantity) return c
+      return { ...c, qty: newQty, amount: newQty * c.product.price }
+    }).filter(c => c.qty > 0))
+  }
+
+  const totalAmount = cart.reduce((s, c) => s + c.amount, 0)
 
   async function handleSale() {
-    if (!selectedId || !selected) { setError(T.fillAll); return }
-    if (qty > selected.quantity) { setError(T.notEnoughStock); return }
-    setLoading(true); setError('')
+    if (cart.length === 0) return
+    setLoading(true)
     const supabase = createClient()
-    await supabase.from('sales').insert({
-      store_id: store.id, product_id: selected.id,
-      product_name: selected.name, quantity: qty,
-      amount: totalPrice, payment_type: payType,
-    })
-    await supabase.from('products').update({ quantity: selected.quantity - qty }).eq('id', selected.id)
-    setSelectedId(''); setQty(1); setSearch('')
+    for (const item of cart) {
+      await supabase.from('sales').insert({
+        store_id: store.id, product_id: item.product.id,
+        product_name: item.product.name, quantity: item.qty,
+        amount: item.amount, payment_type: payType,
+      })
+      await supabase.from('products').update({ quantity: item.product.quantity - item.qty }).eq('id', item.product.id)
+    }
+    setCart([])
     setSuccess(lang === 'kz' ? '✅ Сатылды!' : '✅ Продано!')
     setTimeout(() => setSuccess(''), 2000)
-    setLoading(false); triggerRefresh(); loadData()
+    setLoading(false); triggerRefresh(); loadProducts()
   }
 
   async function handleDebt() {
-    if (!selectedId || !selected) { setError(T.fillAll); return }
-    if (!debtorName) { setError(lang === 'kz' ? 'Қарыз алушы атын енгізіңіз' : 'Введите имя должника'); return }
-    if (qty > selected.quantity) { setError(T.notEnoughStock); return }
-    setLoading(true); setError('')
+    if (cart.length === 0 || !debtorName) return
+    setLoading(true)
     const supabase = createClient()
-    await supabase.from('debts').insert({
-      store_id: store.id, product_id: selected.id,
-      product_name: selected.name, quantity: qty,
-      amount: totalPrice, debtor_name: debtorName,
-      debtor_phone: debtorPhone, due_date: dueDate || null,
-      is_paid: false
-    })
-    await supabase.from('products').update({ quantity: selected.quantity - qty }).eq('id', selected.id)
-    setSelectedId(''); setQty(1); setSearch('')
-    setDebtorName(''); setDebtorPhone(''); setDueDate('')
-    setShowDebtForm(false)
+    for (const item of cart) {
+      await supabase.from('debts').insert({
+        store_id: store.id, product_id: item.product.id,
+        product_name: item.product.name, quantity: item.qty,
+        amount: item.amount, debtor_name: debtorName,
+        debtor_phone: debtorPhone, due_date: dueDate || null, is_paid: false
+      })
+      await supabase.from('products').update({ quantity: item.product.quantity - item.qty }).eq('id', item.product.id)
+    }
+    setCart([]); setDebtorName(''); setDebtorPhone(''); setDueDate(''); setShowDebtForm(false)
     setSuccess(lang === 'kz' ? '✅ Қарыз тіркелді!' : '✅ Долг записан!')
     setTimeout(() => setSuccess(''), 2000)
-    setLoading(false); triggerRefresh(); loadData()
+    setLoading(false); triggerRefresh(); loadProducts()
   }
 
-  async function deleteSale(id: string, isDebt: boolean) {
-    if (!confirm(lang === 'kz' ? 'Жоюға сенімдісіз бе?' : 'Вы уверены?')) return
-    const supabase = createClient()
-    if (isDebt) await supabase.from('debts').delete().eq('id', id)
-    else await supabase.from('sales').delete().eq('id', id)
-    loadData(); triggerRefresh()
-  }
+  const filtered = products.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
+    const matchCat = selectedCat === 'all' || p.category === selectedCat
+    return matchSearch && matchCat
+  })
+
+  const availableCats = CATEGORIES.filter(c => c.key === 'all' || products.some(p => p.category === c.key))
 
   return (
     <div>
-      <div className="card">
-        <div className="section-title">{T.newSale}</div>
-        <div className="gap">
-          <div style={{ position: 'relative' }}>
-            <input
-              placeholder={lang === 'kz' ? '🔍 Товар іздеу немесе тізімнен таңда...' : '🔍 Поиск или выберите из списка...'}
-              value={search}
-              onChange={e => { setSearch(e.target.value); setSelectedId(''); setShowList(true) }}
-              onFocus={() => setShowList(true)}
-            />
-            {showList && (
-              <div style={{
-                position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-                background: '#fff', border: '1px solid #e5e7eb', borderRadius: 6,
-                maxHeight: 200, overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-              }}>
-                {filtered.length === 0
-                  ? <div style={{ padding: '10px 12px', fontSize: 13, color: '#6b7280' }}>{lang === 'kz' ? 'Табылмады' : 'Не найдено'}</div>
-                  : filtered.map(p => (
-                    <div key={p.id}
-                      onClick={() => { setSelectedId(p.id); setSearch(p.name); setShowList(false) }}
-                      style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f3f4f6', fontSize: 14, display: 'flex', justifyContent: 'space-between', background: '#fff' }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f9fafb')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '#fff')}
-                    >
-                      <span>{p.name}</span>
-                      <span style={{ color: '#6b7280' }}>{p.price.toLocaleString()} ₸ · {p.quantity} {T.pieces}</span>
-                    </div>
-                  ))
-                }
-              </div>
-            )}
-          </div>
-
-          <div className="row-2">
-            <input type="number" min={1} value={qty}
-              onChange={e => setQty(Math.max(1, parseInt(e.target.value) || 1))}
-              placeholder={T.quantity} />
-            <select value={payType} onChange={e => setPayType(e.target.value as 'cash' | 'kaspi')}>
-              <option value="cash">{T.cash}</option>
-              <option value="kaspi">Kaspi</option>
-            </select>
-          </div>
-
-          {selected && (
-            <div style={{ background: '#f9fafb', borderRadius: 6, padding: '10px 12px', display: 'flex', justifyContent: 'space-between' }}>
-              <span className="text-muted">{T.total}</span>
-              <span style={{ fontWeight: 700, fontSize: 16 }}>{totalPrice.toLocaleString()} ₸</span>
+      {/* KG Modal */}
+      {kgModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: '100%', maxWidth: 320 }}>
+            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 12 }}>{kgModal.name}</div>
+            <div style={{ fontSize: 13, color: '#6b7280', marginBottom: 12 }}>{lang === 'kz' ? 'Салмақ енгізіңіз (кг)' : 'Введите вес (кг)'}</div>
+            <input type="number" step="0.001" placeholder="0.000" value={kgValue}
+              onChange={e => setKgValue(e.target.value)}
+              autoFocus
+              style={{ marginBottom: 12, fontSize: 20, textAlign: 'center', fontWeight: 600 }} />
+            {kgValue && <div style={{ textAlign: 'center', fontSize: 15, marginBottom: 12, color: '#185FA5', fontWeight: 600 }}>
+              = {(parseFloat(kgValue) * kgModal.price).toLocaleString()} ₸
+            </div>}
+            <div className="row-2">
+              <button className="btn btn-primary" onClick={addKgToCart}>{lang === 'kz' ? 'Қосу' : 'Добавить'}</button>
+              <button className="btn" onClick={() => setKgModal(null)}>{lang === 'kz' ? 'Болдырмау' : 'Отмена'}</button>
             </div>
-          )}
+          </div>
+        </div>
+      )}
 
-          {error && <p style={{ color: '#D85A30', fontSize: 13 }}>{error}</p>}
-          {success && <div style={{ background: '#E1F5EE', borderRadius: 6, padding: '10px 12px', color: '#085041', fontSize: 14, textAlign: 'center' }}>{success}</div>}
+      <input placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
+        value={search} onChange={e => setSearch(e.target.value)}
+        style={{ marginBottom: 8 }} />
+
+      {/* Категориялар */}
+      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6, marginBottom: 10 }}>
+        {availableCats.map(c => (
+          <button key={c.key} onClick={() => setSelectedCat(c.key)} style={{
+            padding: '5px 10px', borderRadius: 99, border: '1px solid #e5e7eb',
+            background: selectedCat === c.key ? '#185FA5' : '#fff',
+            color: selectedCat === c.key ? '#fff' : '#6b7280',
+            cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0
+          }}>
+            {c.icon} {lang === 'kz' ? c.kz : c.ru}
+          </button>
+        ))}
+      </div>
+
+      {/* Товарлар */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+        {filtered.map(p => (
+          <div key={p.id} onClick={() => addToCart(p)} style={{
+            background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
+            padding: '10px 12px', cursor: 'pointer', userSelect: 'none'
+          }}
+            onTouchStart={e => e.currentTarget.style.background = '#f9fafb'}
+            onTouchEnd={e => e.currentTarget.style.background = '#fff'}
+          >
+            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{p.name}</div>
+            <div style={{ fontSize: 12, color: '#6b7280' }}>{p.price.toLocaleString()} ₸/{p.unit || 'шт'}</div>
+            <div style={{ fontSize: 11, color: p.quantity <= 5 ? '#D85A30' : '#0F6E56', marginTop: 2 }}>
+              {p.quantity} {p.unit || 'шт'}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Корзина */}
+      {cart.length > 0 && (
+        <div className="card">
+          <div className="section-title">{lang === 'kz' ? 'Корзина' : 'Корзина'}</div>
+          {cart.map(item => (
+            <div key={item.product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 500 }}>{item.product.name}</div>
+                <div style={{ fontSize: 12, color: '#6b7280' }}>{item.product.price.toLocaleString()} ₸/{item.product.unit || 'шт'}</div>
+              </div>
+              {item.product.unit === 'кг' ? (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 13 }}>{item.qty} кг</span>
+                  <span style={{ fontWeight: 600, fontSize: 13 }}>{item.amount.toLocaleString()} ₸</span>
+                  <span onClick={() => removeFromCart(item.product.id)} style={{ color: '#D85A30', cursor: 'pointer' }}>✕</span>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <button onClick={() => updateQty(item.product.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 16 }}>−</button>
+                  <span style={{ minWidth: 24, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{item.qty}</span>
+                  <button onClick={() => updateQty(item.product.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 16 }}>+</button>
+                  <span style={{ fontWeight: 600, fontSize: 13, minWidth: 60, textAlign: 'right' }}>{item.amount.toLocaleString()} ₸</span>
+                  <span onClick={() => removeFromCart(item.product.id)} style={{ color: '#D85A30', cursor: 'pointer' }}>✕</span>
+                </div>
+              )}
+            </div>
+          ))}
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontWeight: 700, fontSize: 16 }}>
+            <span>{lang === 'kz' ? 'Жалпы' : 'Итого'}</span>
+            <span>{totalAmount.toLocaleString()} ₸</span>
+          </div>
+
+          <select value={payType} onChange={e => setPayType(e.target.value as 'cash' | 'kaspi')} style={{ marginBottom: 8 }}>
+            <option value="cash">{T.cash}</option>
+            <option value="kaspi">Kaspi</option>
+          </select>
+
+          {success && <div style={{ background: '#E1F5EE', borderRadius: 6, padding: '8px 12px', color: '#085041', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>{success}</div>}
 
           <div className="row-2">
-            <button className="btn btn-success" onClick={handleSale} disabled={loading || !selectedId}>
-              {loading ? T.loading : T.sell}
+            <button className="btn btn-success" onClick={handleSale} disabled={loading}>
+              {loading ? T.loading : (lang === 'kz' ? '✓ Сату' : '✓ Продать')}
             </button>
-            <button className="btn" onClick={() => { if (!selectedId) { setError(T.fillAll); return } setShowDebtForm(!showDebtForm) }}
-              style={{ borderColor: '#D97706', color: '#D97706' }} disabled={!selectedId}>
-              💳 {lang === 'kz' ? 'Қарызға беру' : 'В долг'}
+            <button className="btn" onClick={() => setShowDebtForm(!showDebtForm)}
+              style={{ borderColor: '#D97706', color: '#D97706' }}>
+              💳 {lang === 'kz' ? 'Қарызға' : 'В долг'}
             </button>
           </div>
 
           {showDebtForm && (
-            <div style={{ background: '#FEF3C7', borderRadius: 8, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontSize: 13, fontWeight: 600, color: '#92400E' }}>
-                💳 {lang === 'kz' ? 'Қарыз мәліметтері' : 'Данные о долге'}
-              </div>
-              <input placeholder={lang === 'kz' ? 'Аты-жөні *' : 'Имя должника *'}
-                value={debtorName} onChange={e => setDebtorName(e.target.value)} />
-              <input placeholder={lang === 'kz' ? 'Телефон' : 'Телефон'}
-                value={debtorPhone} onChange={e => setDebtorPhone(e.target.value)} />
-              <div>
-                <label style={{ fontSize: 12, color: '#92400E', marginBottom: 4, display: 'block' }}>
-                  {lang === 'kz' ? 'Қайтару мерзімі' : 'Срок возврата'}
-                </label>
-                <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-              </div>
+            <div style={{ background: '#FEF3C7', borderRadius: 8, padding: 12, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <input placeholder={lang === 'kz' ? 'Аты-жөні *' : 'Имя должника *'} value={debtorName} onChange={e => setDebtorName(e.target.value)} />
+              <input placeholder={lang === 'kz' ? 'Телефон' : 'Телефон'} value={debtorPhone} onChange={e => setDebtorPhone(e.target.value)} />
+              <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
               <button className="btn" onClick={handleDebt} disabled={loading}
                 style={{ background: '#D97706', color: '#fff', borderColor: '#D97706' }}>
                 {loading ? T.loading : (lang === 'kz' ? 'Қарызға беру' : 'Выдать в долг')}
@@ -191,29 +262,7 @@ export default function SalePage() {
             </div>
           )}
         </div>
-      </div>
-
-      <div className="card">
-        <div className="section-title">{lang === 'kz' ? 'Бүгінгі сатылымдар' : 'Сегодняшние продажи'}</div>
-        {sales.length === 0
-          ? <p className="text-muted" style={{ textAlign: 'center', padding: '12px 0' }}>{T.noSales}</p>
-          : sales.map(sale => (
-            <div key={sale.id} className="row">
-              <div>
-                <div style={{ fontSize: 14 }}>{sale.product_name} × {sale.quantity}</div>
-                {sale.is_debt
-                  ? <span className="badge" style={{ background: '#FEF3C7', color: '#92400E' }}>💳 {lang === 'kz' ? 'Қарыз' : 'Долг'} — {sale.debtor_name}</span>
-                  : <span className={`badge badge-${sale.payment_type}`}>{sale.payment_type === 'cash' ? T.cash : 'Kaspi'}</span>
-                }
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontWeight: 600 }}>{sale.amount.toLocaleString()} ₸</span>
-                <span onClick={() => deleteSale(sale.id, sale.is_debt || false)} style={{ color: '#D85A30', cursor: 'pointer', fontSize: 18 }}>🗑</span>
-              </div>
-            </div>
-          ))
-        }
-      </div>
+      )}
     </div>
   )
 }
