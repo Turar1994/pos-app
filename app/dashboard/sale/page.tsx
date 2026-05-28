@@ -46,17 +46,9 @@ export default function SalePage() {
 
   function playBeep(success = true) {
     try {
-      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.frequency.value = success ? 1800 : 400
-      osc.type = 'sine'
-      gain.gain.setValueAtTime(0.3, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (success ? 0.15 : 0.3))
-      osc.start(ctx.currentTime)
-      osc.stop(ctx.currentTime + (success ? 0.15 : 0.3))
+      const audio = new Audio(success ? '/sounds/beep-success.wav' : '/sounds/beep-error.wav')
+      audio.volume = 1.0
+      audio.play().catch(() => {})
     } catch (e) {}
   }
   const lastScannedRef = useRef<string>('')
