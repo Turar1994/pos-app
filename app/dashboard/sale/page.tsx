@@ -37,10 +37,9 @@ export default function SalePage() {
   const [debtorName, setDebtorName] = useState('')
   const [debtorPhone, setDebtorPhone] = useState('')
   const [dueDate, setDueDate] = useState('')
-
-  // Сканер
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
+
   const videoRef = useRef<HTMLVideoElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -53,6 +52,15 @@ export default function SalePage() {
   useEffect(() => { loadProducts() }, [store.id])
   useEffect(() => { productsRef.current = products }, [products])
 
+  // iOS Safari үшін polyfill жүктеу
+  useEffect(() => {
+    if (!('BarcodeDetector' in window)) {
+      const script = document.createElement('script')
+      script.src = 'https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es2017/barcode_detector_lite.min.js'
+      document.head.appendChild(script)
+    }
+  }, [])
+
   async function loadProducts() {
     const supabase = createClient()
     const { data } = await supabase.from('products').select('*').eq('store_id', store.id).gt('quantity', 0).order('name')
@@ -62,20 +70,15 @@ export default function SalePage() {
   async function startScanner() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-        }
+        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
       })
       const track = stream.getVideoTracks()[0]
-      try {
-        await (track as any).applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
-      } catch (e) {}
+      try { await (track as any).applyConstraints({ advanced: [{ focusMode: 'continuous' }] }) } catch (e) {}
       streamRef.current = stream
       setScanning(true)
       setScanMsg('')
       lastScannedRef.current = ''
+      detectorRef.current = null
       setTimeout(async () => {
         if (!videoRef.current) return
         videoRef.current.srcObject = stream
@@ -98,18 +101,6 @@ export default function SalePage() {
     lastScannedRef.current = ''
   }
 
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const detectorRef = useRef<any>(null)
-
-  // Polyfill жүктеу (iOS Safari үшін)
-  useEffect(() => {
-    if (!('BarcodeDetector' in window)) {
-      const script = document.createElement('script')
-      script.src = 'https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es2017/barcode_detector_lite.min.js'
-      document.head.appendChild(script)
-    }
-  }, [])
-
   const detectBarcodes = useCallback(async () => {
     if (!videoRef.current || videoRef.current.readyState < 2) {
       animFrameRef.current = requestAnimationFrame(detectBarcodes)
@@ -120,23 +111,21 @@ export default function SalePage() {
       if (!BD) { animFrameRef.current = requestAnimationFrame(detectBarcodes); return }
 
       if (!detectorRef.current) {
-        detectorRef.current = new BD({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf']
-        })
+        detectorRef.current = new BD({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'] })
       }
 
       // Canvas арқылы фрейм алу (iOS үшін сенімдірек)
       const canvas = canvasRef.current
-      if (canvas) {
+      if (canvas && videoRef.current.videoWidth > 0) {
         const ctx = canvas.getContext('2d', { willReadFrequently: true })
         if (ctx) {
-          canvas.width = videoRef.current.videoWidth || 640
-          canvas.height = videoRef.current.videoHeight || 480
+          canvas.width = videoRef.current.videoWidth
+          canvas.height = videoRef.current.videoHeight
           ctx.drawImage(videoRef.current, 0, 0)
         }
       }
 
-      const source = canvas || videoRef.current
+      const source = (canvas && canvas.width > 0) ? canvas : videoRef.current
       const barcodes = await detectorRef.current.detect(source)
 
       if (barcodes.length > 0) {
@@ -155,19 +144,16 @@ export default function SalePage() {
   function handleBarcode(code: string) {
     const product = productsRef.current.find(p => p.barcode === code)
     if (!product) {
-      setScanMsg(lang === 'kz' ? `"${code}" — Товар табылмады` : `"${code}" — Товар не найден`)
+      setScanMsg(lang === 'kz' ? `Товар табылмады: ${code}` : `Товар не найден: ${code}`)
       if (navigator.vibrate) navigator.vibrate([100, 50, 100])
-      setTimeout(() => setScanMsg(''), 2000)
+      setTimeout(() => setScanMsg(''), 2500)
       return
     }
-
-    // Товар табылды — корзинаға қосу
     if (product.unit === 'кг') {
       stopScanner()
       setKgModal(product); setKgValue('')
       return
     }
-
     setCart(prev => {
       const existing = prev.find(c => c.product.id === product.id)
       if (existing) {
@@ -177,7 +163,6 @@ export default function SalePage() {
       }
       return [...prev, { product, qty: 1, amount: product.price }]
     })
-
     setScanMsg(`✅ ${product.name}`)
     if (navigator.vibrate) navigator.vibrate(50)
     setTimeout(() => setScanMsg(''), 1500)
@@ -227,7 +212,6 @@ export default function SalePage() {
     if (isDebt && !debtorName) return
     setLoading(true)
     const supabase = createClient()
-
     const { data: receipt } = await supabase.from('receipts').insert({
       store_id: store.id, total_amount: totalAmount,
       payment_type: isDebt ? 'debt' : payType,
@@ -256,7 +240,6 @@ export default function SalePage() {
       }
       await supabase.from('products').update({ quantity: prod.quantity - item.qty }).eq('id', item.product.id)
     }
-
     setCart([]); setDebtorName(''); setDebtorPhone(''); setDueDate(''); setShowDebtForm(false)
     setSuccess(isDebt ? (lang === 'kz' ? '✅ Қарыз тіркелді!' : '✅ Долг записан!') : (lang === 'kz' ? '✅ Сатылды!' : '✅ Продано!'))
     setTimeout(() => setSuccess(''), 2000)
@@ -268,7 +251,6 @@ export default function SalePage() {
     const matchCat = selectedCat === 'all' || p.category === selectedCat
     return matchSearch && matchCat
   })
-
   const availableCats = CATEGORIES.filter(c => c.key === 'all' || products.some(p => p.category === c.key))
 
   return (
@@ -300,10 +282,9 @@ export default function SalePage() {
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 999, display: 'flex', flexDirection: 'column' }}>
           <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
           <canvas ref={canvasRef} style={{ display: 'none' }} />
-              {/* Жай сызық — рамка шарты жоқ */}
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ width: '80%', height: 2, background: 'rgba(255,80,80,0.8)', boxShadow: '0 0 8px rgba(255,80,80,0.8)' }} />
-            <div style={{ marginTop: 20, color: '#fff', fontSize: 14, textAlign: 'center', background: 'rgba(0,0,0,0.6)', padding: '8px 20px', borderRadius: 99 }}>
+            <div style={{ width: '80%', height: 2, background: 'rgba(255,80,80,0.85)', boxShadow: '0 0 10px rgba(255,80,80,0.8)' }} />
+            <div style={{ marginTop: 20, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.6)', padding: '8px 20px', borderRadius: 99 }}>
               {lang === 'kz' ? '📷 Штрихкодты камераға бағыттаңыз' : '📷 Наведите камеру на штрихкод'}
             </div>
           </div>
@@ -313,17 +294,13 @@ export default function SalePage() {
               background: scanMsg.startsWith('✅') ? '#0F6E56' : '#D85A30',
               color: '#fff', borderRadius: 10, padding: '12px 16px',
               textAlign: 'center', fontSize: 15, fontWeight: 500
-            }}>
-              {scanMsg}
-            </div>
+            }}>{scanMsg}</div>
           )}
           <button onClick={stopScanner} style={{
             position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
             background: '#fff', border: 'none', borderRadius: 99, padding: '12px 32px',
             fontSize: 15, fontWeight: 600, cursor: 'pointer'
-          }}>
-            {lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}
-          </button>
+          }}>{lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}</button>
         </div>
       )}
 
@@ -392,19 +369,15 @@ export default function SalePage() {
               )}
             </div>
           ))}
-
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontWeight: 700, fontSize: 16, borderTop: '2px solid #e5e7eb', marginTop: 4 }}>
             <span>{lang === 'kz' ? 'Жалпы' : 'Итого'}</span>
             <span>{totalAmount.toLocaleString()} ₸</span>
           </div>
-
           <select value={payType} onChange={e => setPayType(e.target.value as 'cash' | 'kaspi')} style={{ marginBottom: 8 }}>
             <option value="cash">{T.cash}</option>
             <option value="kaspi">Kaspi</option>
           </select>
-
           {success && <div style={{ background: '#E1F5EE', borderRadius: 6, padding: '8px 12px', color: '#085041', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>{success}</div>}
-
           <div className="row-2">
             <button className="btn btn-success" onClick={() => handleSale(false)} disabled={loading}>
               {loading ? T.loading : (lang === 'kz' ? '✓ Сату' : '✓ Продать')}
@@ -414,7 +387,6 @@ export default function SalePage() {
               💳 {lang === 'kz' ? 'Қарызға' : 'В долг'}
             </button>
           </div>
-
           {showDebtForm && (
             <div style={{ background: '#FEF3C7', borderRadius: 8, padding: 12, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input placeholder={lang === 'kz' ? 'Аты-жөні *' : 'Имя должника *'} value={debtorName} onChange={e => setDebtorName(e.target.value)} />
