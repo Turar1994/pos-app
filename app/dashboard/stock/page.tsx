@@ -98,8 +98,10 @@ export default function StockPage() {
             target: scannerDivRef.current!,
             constraints: {
               facingMode: 'environment',
-              width: { min: 640, ideal: 1280 },
-              height: { min: 480, ideal: 720 },
+              width: { min: 1280, ideal: 1920 },
+              height: { min: 720, ideal: 1080 },
+              focusMode: 'continuous',
+              advanced: [{ focusMode: 'continuous' }],
             },
           } as any,
           decoder: {
@@ -107,8 +109,16 @@ export default function StockPage() {
             multiple: false,
           },
           locate: true,
-          frequency: 10,
+          frequency: 15,
+          locator: {
+            patchSize: 'medium',
+            halfSample: false,
+          },
         } as any)
+
+        Quagga.CameraAccess.getActiveTrack()?.applyConstraints?.({
+          advanced: [{ focusMode: 'continuous' } as any]
+        }).catch(() => {})
         Quagga.start()
         Quagga.onDetected((result: any) => {
           const code = result?.codeResult?.code
