@@ -64,26 +64,38 @@ export default function SalePage() {
 
   function playBeep(success = true) {
     try {
-      // Method 1: Web Audio API (works when unlocked)
-      if (audioCtxRef.current) {
-        const ctx = audioCtxRef.current
-        if (ctx.state === 'suspended') ctx.resume()
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      const ctx = audioCtxRef.current || new AudioCtx()
+      audioCtxRef.current = ctx
+      if (ctx.state === 'suspended') ctx.resume()
+
+      if (success) {
+        // Табылды — екі жоғары нота: "ти-ти"
+        [0, 0.12].forEach((delay, i) => {
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.frequency.value = i === 0 ? 1400 : 1800
+          osc.type = 'square'
+          gain.gain.setValueAtTime(0.2, ctx.currentTime + delay)
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1)
+          osc.start(ctx.currentTime + delay)
+          osc.stop(ctx.currentTime + delay + 0.1)
+        })
+      } else {
+        // Табылмады — бір төмен нота: "туу"
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
         osc.connect(gain)
         gain.connect(ctx.destination)
-        osc.frequency.value = success ? 1800 : 400
-        osc.type = 'sine'
-        gain.gain.setValueAtTime(0.4, ctx.currentTime)
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (success ? 0.15 : 0.3))
+        osc.frequency.value = 300
+        osc.type = 'sawtooth'
+        gain.gain.setValueAtTime(0.3, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
         osc.start(ctx.currentTime)
-        osc.stop(ctx.currentTime + (success ? 0.15 : 0.3))
-        return
+        osc.stop(ctx.currentTime + 0.35)
       }
-      // Method 2: Audio file fallback
-      const audio = new Audio(success ? '/sounds/beep-success.wav' : '/sounds/beep-error.wav')
-      audio.volume = 1.0
-      audio.play().catch(() => {})
     } catch (e) {}
   }
   const lastScannedRef = useRef<string>('')
