@@ -42,8 +42,10 @@ export default function SalePage() {
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
   const videoRef = useRef<HTMLVideoElement>(null)
+  const canvasRef = useRef<HTMLCanvasElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const animFrameRef = useRef<number>(0)
+  const detectorRef = useRef<any>(null)
   const lastScannedRef = useRef<string>('')
   const lastScannedTimeRef = useRef<number>(0)
   const productsRef = useRef<Product[]>([])
@@ -61,30 +63,25 @@ export default function SalePage() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: 'environment',
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          focusMode: 'continuous',
-        } as any
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        }
       })
-      // Автофокус қосу
       const track = stream.getVideoTracks()[0]
-      if (track && 'applyConstraints' in track) {
-        try {
-          await (track as any).applyConstraints({
-            advanced: [{ focusMode: 'continuous' }]
-          })
-        } catch (e) {}
-      }
+      try {
+        await (track as any).applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
+      } catch (e) {}
       streamRef.current = stream
       setScanning(true)
       setScanMsg('')
+      lastScannedRef.current = ''
       setTimeout(async () => {
         if (!videoRef.current) return
         videoRef.current.srcObject = stream
         await videoRef.current.play()
         detectBarcodes()
-      }, 100)
+      }, 300)
     } catch (e) {
       setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
     }
@@ -101,30 +98,57 @@ export default function SalePage() {
     lastScannedRef.current = ''
   }
 
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const detectorRef = useRef<any>(null)
+
+  // Polyfill жүктеу (iOS Safari үшін)
+  useEffect(() => {
+    if (!('BarcodeDetector' in window)) {
+      const script = document.createElement('script')
+      script.src = 'https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es2017/barcode_detector_lite.min.js'
+      document.head.appendChild(script)
+    }
+  }, [])
+
   const detectBarcodes = useCallback(async () => {
     if (!videoRef.current || videoRef.current.readyState < 2) {
       animFrameRef.current = requestAnimationFrame(detectBarcodes)
       return
     }
     try {
-      if ('BarcodeDetector' in window) {
-        const detector = new (window as any).BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'codabar']
+      const BD = (window as any).BarcodeDetector
+      if (!BD) { animFrameRef.current = requestAnimationFrame(detectBarcodes); return }
+
+      if (!detectorRef.current) {
+        detectorRef.current = new BD({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf']
         })
-        // Бүкіл видео фреймін сканерлеу — рамка шарты жоқ
-        const barcodes = await detector.detect(videoRef.current)
-        if (barcodes.length > 0) {
-          const code = barcodes[0].rawValue
-          const now = Date.now()
-          if (code !== lastScannedRef.current || now - lastScannedTimeRef.current > 2000) {
-            lastScannedRef.current = code
-            lastScannedTimeRef.current = now
-            handleBarcode(code)
-          }
+      }
+
+      // Canvas арқылы фрейм алу (iOS үшін сенімдірек)
+      const canvas = canvasRef.current
+      if (canvas) {
+        const ctx = canvas.getContext('2d', { willReadFrequently: true })
+        if (ctx) {
+          canvas.width = videoRef.current.videoWidth || 640
+          canvas.height = videoRef.current.videoHeight || 480
+          ctx.drawImage(videoRef.current, 0, 0)
+        }
+      }
+
+      const source = canvas || videoRef.current
+      const barcodes = await detectorRef.current.detect(source)
+
+      if (barcodes.length > 0) {
+        const code = barcodes[0].rawValue
+        const now = Date.now()
+        if (code !== lastScannedRef.current || now - lastScannedTimeRef.current > 2000) {
+          lastScannedRef.current = code
+          lastScannedTimeRef.current = now
+          handleBarcode(code)
         }
       }
     } catch (e) {}
-    // 60fps жылдамдықта сканерлеу
     animFrameRef.current = requestAnimationFrame(detectBarcodes)
   }, [])
 
@@ -275,6 +299,7 @@ export default function SalePage() {
       {scanning && (
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 999, display: 'flex', flexDirection: 'column' }}>
           <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
               {/* Жай сызық — рамка шарты жоқ */}
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <div style={{ width: '80%', height: 2, background: 'rgba(255,80,80,0.8)', boxShadow: '0 0 8px rgba(255,80,80,0.8)' }} />
