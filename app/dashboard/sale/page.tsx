@@ -40,26 +40,14 @@ export default function SalePage() {
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
 
-  const videoRef = useRef<HTMLVideoElement>(null)
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const animFrameRef = useRef<number>(0)
-  const detectorRef = useRef<any>(null)
+  const scannerDivRef = useRef<HTMLDivElement>(null)
+  const quaggaRef = useRef<any>(null)
+  const productsRef = useRef<Product[]>([])
   const lastScannedRef = useRef<string>('')
   const lastScannedTimeRef = useRef<number>(0)
-  const productsRef = useRef<Product[]>([])
 
   useEffect(() => { loadProducts() }, [store.id])
   useEffect(() => { productsRef.current = products }, [products])
-
-  // iOS Safari үшін polyfill жүктеу
-  useEffect(() => {
-    if (!('BarcodeDetector' in window)) {
-      const script = document.createElement('script')
-      script.src = 'https://cdn.jsdelivr.net/npm/barcode-detector@2/dist/es2017/barcode_detector_lite.min.js'
-      document.head.appendChild(script)
-    }
-  }, [])
 
   async function loadProducts() {
     const supabase = createClient()
@@ -68,78 +56,60 @@ export default function SalePage() {
   }
 
   async function startScanner() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
-      })
-      const track = stream.getVideoTracks()[0]
-      try { await (track as any).applyConstraints({ advanced: [{ focusMode: 'continuous' }] }) } catch (e) {}
-      streamRef.current = stream
-      setScanning(true)
-      setScanMsg('')
-      lastScannedRef.current = ''
-      detectorRef.current = null
-      setTimeout(async () => {
-        if (!videoRef.current) return
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-        detectBarcodes()
-      }, 300)
-    } catch (e) {
-      setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
-    }
+    setScanning(true)
+    setScanMsg('')
+    lastScannedRef.current = ''
+
+    setTimeout(async () => {
+      try {
+        const Quagga = (await import('@ericblade/quagga2')).default
+        quaggaRef.current = Quagga
+
+        await Quagga.init({
+          inputStream: {
+            name: 'Live',
+            type: 'LiveStream',
+            target: scannerDivRef.current!,
+            constraints: {
+              facingMode: 'environment',
+              width: { min: 640, ideal: 1280 },
+              height: { min: 480, ideal: 720 },
+            },
+          },
+          decoder: {
+            readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader', 'code_128_reader', 'code_39_reader'],
+            multiple: false,
+          },
+          locate: true,
+          frequency: 10,
+        })
+
+        Quagga.start()
+
+        Quagga.onDetected((result: any) => {
+          const code = result?.codeResult?.code
+          if (!code) return
+          const now = Date.now()
+          if (code === lastScannedRef.current && now - lastScannedTimeRef.current < 2000) return
+          lastScannedRef.current = code
+          lastScannedTimeRef.current = now
+          handleBarcode(code)
+        })
+      } catch (e) {
+        setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
+      }
+    }, 300)
   }
 
   function stopScanner() {
-    cancelAnimationFrame(animFrameRef.current)
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
-      streamRef.current = null
+    if (quaggaRef.current) {
+      try { quaggaRef.current.stop() } catch (e) {}
+      quaggaRef.current = null
     }
     setScanning(false)
     setScanMsg('')
     lastScannedRef.current = ''
   }
-
-  const detectBarcodes = useCallback(async () => {
-    if (!videoRef.current || videoRef.current.readyState < 2) {
-      animFrameRef.current = requestAnimationFrame(detectBarcodes)
-      return
-    }
-    try {
-      const BD = (window as any).BarcodeDetector
-      if (!BD) { animFrameRef.current = requestAnimationFrame(detectBarcodes); return }
-
-      if (!detectorRef.current) {
-        detectorRef.current = new BD({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf'] })
-      }
-
-      // Canvas арқылы фрейм алу (iOS үшін сенімдірек)
-      const canvas = canvasRef.current
-      if (canvas && videoRef.current.videoWidth > 0) {
-        const ctx = canvas.getContext('2d', { willReadFrequently: true })
-        if (ctx) {
-          canvas.width = videoRef.current.videoWidth
-          canvas.height = videoRef.current.videoHeight
-          ctx.drawImage(videoRef.current, 0, 0)
-        }
-      }
-
-      const source = (canvas && canvas.width > 0) ? canvas : videoRef.current
-      const barcodes = await detectorRef.current.detect(source)
-
-      if (barcodes.length > 0) {
-        const code = barcodes[0].rawValue
-        const now = Date.now()
-        if (code !== lastScannedRef.current || now - lastScannedTimeRef.current > 2000) {
-          lastScannedRef.current = code
-          lastScannedTimeRef.current = now
-          handleBarcode(code)
-        }
-      }
-    } catch (e) {}
-    animFrameRef.current = requestAnimationFrame(detectBarcodes)
-  }, [])
 
   function handleBarcode(code: string) {
     const product = productsRef.current.find(p => p.barcode === code)
@@ -163,7 +133,7 @@ export default function SalePage() {
       }
       return [...prev, { product, qty: 1, amount: product.price }]
     })
-    setScanMsg(`✅ ${product.name}`)
+    setScanMsg(`\u2705 ${product.name}`)
     if (navigator.vibrate) navigator.vibrate(50)
     setTimeout(() => setScanMsg(''), 1500)
   }
@@ -241,7 +211,7 @@ export default function SalePage() {
       await supabase.from('products').update({ quantity: prod.quantity - item.qty }).eq('id', item.product.id)
     }
     setCart([]); setDebtorName(''); setDebtorPhone(''); setDueDate(''); setShowDebtForm(false)
-    setSuccess(isDebt ? (lang === 'kz' ? '✅ Қарыз тіркелді!' : '✅ Долг записан!') : (lang === 'kz' ? '✅ Сатылды!' : '✅ Продано!'))
+    setSuccess(isDebt ? (lang === 'kz' ? '\u2705 Қарыз тіркелді!' : '\u2705 Долг записан!') : (lang === 'kz' ? '\u2705 Сатылды!' : '\u2705 Продано!'))
     setTimeout(() => setSuccess(''), 2000)
     setLoading(false); triggerRefresh(); loadProducts()
   }
@@ -255,7 +225,6 @@ export default function SalePage() {
 
   return (
     <div>
-      {/* KG Modal */}
       {kgModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: '100%', maxWidth: 320 }}>
@@ -277,11 +246,9 @@ export default function SalePage() {
         </div>
       )}
 
-      {/* Сканер */}
       {scanning && (
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 999, display: 'flex', flexDirection: 'column' }}>
-          <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
-          <canvas ref={canvasRef} style={{ display: 'none' }} />
+          <div ref={scannerDivRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }} />
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
             <div style={{ width: '80%', height: 2, background: 'rgba(255,80,80,0.85)', boxShadow: '0 0 10px rgba(255,80,80,0.8)' }} />
             <div style={{ marginTop: 20, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.6)', padding: '8px 20px', borderRadius: 99 }}>
@@ -291,7 +258,7 @@ export default function SalePage() {
           {scanMsg && (
             <div style={{
               position: 'absolute', bottom: 120, left: 20, right: 20,
-              background: scanMsg.startsWith('✅') ? '#0F6E56' : '#D85A30',
+              background: scanMsg.startsWith('\u2705') ? '#0F6E56' : '#D85A30',
               color: '#fff', borderRadius: 10, padding: '12px 16px',
               textAlign: 'center', fontSize: 15, fontWeight: 500
             }}>{scanMsg}</div>
@@ -300,11 +267,10 @@ export default function SalePage() {
             position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
             background: '#fff', border: 'none', borderRadius: 99, padding: '12px 32px',
             fontSize: 15, fontWeight: 600, cursor: 'pointer'
-          }}>{lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}</button>
+          }}>{lang === 'kz' ? '\u2715 Жабу' : '\u2715 Закрыть'}</button>
         </div>
       )}
 
-      {/* Поиск + Сканер */}
       <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
         <input placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
           value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
@@ -314,7 +280,6 @@ export default function SalePage() {
         }}>📷</button>
       </div>
 
-      {/* Категориялар */}
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6, marginBottom: 10 }}>
         {availableCats.map(c => (
           <button key={c.key} onClick={() => setSelectedCat(c.key)} style={{
@@ -326,7 +291,6 @@ export default function SalePage() {
         ))}
       </div>
 
-      {/* Товарлар */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
         {filtered.map(p => (
           <div key={p.id} onClick={() => addToCart(p)} style={{
@@ -342,7 +306,6 @@ export default function SalePage() {
         ))}
       </div>
 
-      {/* Корзина */}
       {cart.length > 0 && (
         <div className="card">
           <div className="section-title">{lang === 'kz' ? 'Корзина' : 'Корзина'}</div>
@@ -380,7 +343,7 @@ export default function SalePage() {
           {success && <div style={{ background: '#E1F5EE', borderRadius: 6, padding: '8px 12px', color: '#085041', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>{success}</div>}
           <div className="row-2">
             <button className="btn btn-success" onClick={() => handleSale(false)} disabled={loading}>
-              {loading ? T.loading : (lang === 'kz' ? '✓ Сату' : '✓ Продать')}
+              {loading ? T.loading : (lang === 'kz' ? '\u2713 Сату' : '\u2713 Продать')}
             </button>
             <button className="btn" onClick={() => setShowDebtForm(!showDebtForm)}
               style={{ borderColor: '#D97706', color: '#D97706' }}>
