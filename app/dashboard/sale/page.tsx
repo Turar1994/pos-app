@@ -70,28 +70,28 @@ export default function SalePage() {
       if (ctx.state === 'suspended') ctx.resume()
 
       if (success) {
-        // Табылды — екі жоғары нота: "ти-ти"
-        [0, 0.12].forEach((delay, i) => {
+        // Табылды — екі жоғары нота "ти-ти" (sine — iOS-та жұмыс істейді)
+        [0, 0.13].forEach((delay, i) => {
           const osc = ctx.createOscillator()
           const gain = ctx.createGain()
           osc.connect(gain)
           gain.connect(ctx.destination)
-          osc.frequency.value = i === 0 ? 1400 : 1800
-          osc.type = 'square'
-          gain.gain.setValueAtTime(0.2, ctx.currentTime + delay)
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.1)
+          osc.frequency.value = i === 0 ? 1200 : 1600
+          osc.type = 'sine'
+          gain.gain.setValueAtTime(0.5, ctx.currentTime + delay)
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.12)
           osc.start(ctx.currentTime + delay)
-          osc.stop(ctx.currentTime + delay + 0.1)
+          osc.stop(ctx.currentTime + delay + 0.12)
         })
       } else {
-        // Табылмады — бір төмен нота: "туу"
+        // Табылмады — бір төмен нота "туу"
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
         osc.connect(gain)
         gain.connect(ctx.destination)
         osc.frequency.value = 300
-        osc.type = 'sawtooth'
-        gain.gain.setValueAtTime(0.3, ctx.currentTime)
+        osc.type = 'sine'
+        gain.gain.setValueAtTime(0.5, ctx.currentTime)
         gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
         osc.start(ctx.currentTime)
         osc.stop(ctx.currentTime + 0.35)
@@ -127,8 +127,10 @@ export default function SalePage() {
             target: scannerDivRef.current!,
             constraints: {
               facingMode: 'environment',
-              width: { min: 640, ideal: 1280 },
-              height: { min: 480, ideal: 720 },
+              width: { min: 1280, ideal: 1920 },
+              height: { min: 720, ideal: 1080 },
+              focusMode: 'continuous',
+              advanced: [{ focusMode: 'continuous' }],
             },
           } as any,
           decoder: {
@@ -136,8 +138,17 @@ export default function SalePage() {
             multiple: false,
           },
           locate: true,
-          frequency: 10,
+          frequency: 15,
+          locator: {
+            patchSize: 'medium',
+            halfSample: false,
+          },
         } as any)
+
+        // Автофокус track-ке тікелей қосу
+        Quagga.CameraAccess.getActiveTrack()?.applyConstraints?.({
+          advanced: [{ focusMode: 'continuous' } as any]
+        }).catch(() => {})
 
         Quagga.start()
 
