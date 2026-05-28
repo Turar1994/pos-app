@@ -250,9 +250,14 @@ export default function SalePage() {
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 999, display: 'flex', flexDirection: 'column' }}>
           <div ref={scannerDivRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }} />
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ width: '80%', height: 2, background: 'rgba(255,80,80,0.85)', boxShadow: '0 0 10px rgba(255,80,80,0.8)' }} />
-            <div style={{ marginTop: 20, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.6)', padding: '8px 20px', borderRadius: 99 }}>
-              {lang === 'kz' ? '📷 Штрихкодты камераға бағыттаңыз' : '📷 Наведите камеру на штрихкод'}
+            <div style={{
+              width: 280, height: 140,
+              border: '3px solid rgba(255,80,80,0.9)',
+              borderRadius: 12,
+              boxShadow: '0 0 0 9999px rgba(0,0,0,0.55), 0 0 20px rgba(255,80,80,0.5)'
+            }} />
+            <div style={{ marginTop: 16, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.6)', padding: '8px 20px', borderRadius: 99 }}>
+              {lang === 'kz' ? '📷 Штрихкодты рамкаға бағыттаңыз' : '📷 Наведите штрихкод на рамку'}
             </div>
           </div>
           {scanMsg && (
