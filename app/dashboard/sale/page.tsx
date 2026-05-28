@@ -1,10 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
 
-type Product = { id: string; name: string; price: number; quantity: number; unit?: string; category?: string }
+type Product = { id: string; name: string; price: number; quantity: number; unit?: string; category?: string; barcode?: string }
 type CartItem = { product: Product; qty: number; amount: number }
 
 const CATEGORIES = [
@@ -38,7 +38,18 @@ export default function SalePage() {
   const [debtorPhone, setDebtorPhone] = useState('')
   const [dueDate, setDueDate] = useState('')
 
+  // Сканер
+  const [scanning, setScanning] = useState(false)
+  const [scanMsg, setScanMsg] = useState('')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const animFrameRef = useRef<number>(0)
+  const lastScannedRef = useRef<string>('')
+  const lastScannedTimeRef = useRef<number>(0)
+  const productsRef = useRef<Product[]>([])
+
   useEffect(() => { loadProducts() }, [store.id])
+  useEffect(() => { productsRef.current = products }, [products])
 
   async function loadProducts() {
     const supabase = createClient()
@@ -46,10 +57,100 @@ export default function SalePage() {
     setProducts(data || [])
   }
 
-  function addToCart(product: Product) {
-    if (product.unit === 'кг') {
-      setKgModal(product); setKgValue(''); return
+  // Штрихкод оқу — ZXing library
+  async function startScanner() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+      })
+      streamRef.current = stream
+      setScanning(true)
+      setScanMsg('')
+
+      setTimeout(async () => {
+        if (!videoRef.current) return
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+        detectBarcodes()
+      }, 100)
+    } catch (e) {
+      setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
     }
+  }
+
+  function stopScanner() {
+    cancelAnimationFrame(animFrameRef.current)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+    setScanning(false)
+    setScanMsg('')
+    lastScannedRef.current = ''
+  }
+
+  const detectBarcodes = useCallback(async () => {
+    if (!videoRef.current || videoRef.current.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(detectBarcodes)
+      return
+    }
+
+    try {
+      // BarcodeDetector API (Chrome mobile)
+      if ('BarcodeDetector' in window) {
+        const detector = new (window as any).BarcodeDetector({
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
+        })
+        const barcodes = await detector.detect(videoRef.current)
+        if (barcodes.length > 0) {
+          const code = barcodes[0].rawValue
+          const now = Date.now()
+          // Дубликат болдырмау — 2 секунд
+          if (code !== lastScannedRef.current || now - lastScannedTimeRef.current > 2000) {
+            lastScannedRef.current = code
+            lastScannedTimeRef.current = now
+            handleBarcode(code)
+          }
+        }
+      }
+    } catch (e) {}
+
+    animFrameRef.current = requestAnimationFrame(detectBarcodes)
+  }, [])
+
+  function handleBarcode(code: string) {
+    const product = productsRef.current.find(p => p.barcode === code)
+    if (!product) {
+      setScanMsg(lang === 'kz' ? `"${code}" — Товар табылмады` : `"${code}" — Товар не найден`)
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+      setTimeout(() => setScanMsg(''), 2000)
+      return
+    }
+
+    // Товар табылды — корзинаға қосу
+    if (product.unit === 'кг') {
+      stopScanner()
+      setKgModal(product); setKgValue('')
+      return
+    }
+
+    setCart(prev => {
+      const existing = prev.find(c => c.product.id === product.id)
+      if (existing) {
+        if (existing.qty >= product.quantity) return prev
+        return prev.map(c => c.product.id === product.id
+          ? { ...c, qty: c.qty + 1, amount: (c.qty + 1) * product.price } : c)
+      }
+      return [...prev, { product, qty: 1, amount: product.price }]
+    })
+
+    setScanMsg(`✅ ${product.name}`)
+    if (navigator.vibrate) navigator.vibrate(50)
+    setTimeout(() => setScanMsg(''), 1500)
+  }
+
+  function addToCart(product: Product) {
+    if (product.unit === 'кг') { setKgModal(product); setKgValue(''); return }
     const existing = cart.find(c => c.product.id === product.id)
     if (existing) {
       if (existing.qty >= product.quantity) return
@@ -67,7 +168,7 @@ export default function SalePage() {
     const existing = cart.find(c => c.product.id === kgModal.id)
     if (existing) {
       setCart(cart.map(c => c.product.id === kgModal.id
-        ? { ...c, qty: +(c.qty + qty).toFixed(3), amount: +(( c.qty + qty) * kgModal.price).toFixed(0) } : c))
+        ? { ...c, qty: +(c.qty + qty).toFixed(3), amount: +((c.qty + qty) * kgModal.price).toFixed(0) } : c))
     } else {
       setCart([...cart, { product: kgModal, qty, amount: +(qty * kgModal.price).toFixed(0) }])
     }
@@ -93,10 +194,8 @@ export default function SalePage() {
     setLoading(true)
     const supabase = createClient()
 
-    // Алдымен чек жасаймыз
     const { data: receipt } = await supabase.from('receipts').insert({
-      store_id: store.id,
-      total_amount: totalAmount,
+      store_id: store.id, total_amount: totalAmount,
       payment_type: isDebt ? 'debt' : payType,
       debtor_name: isDebt ? debtorName : null,
       debtor_phone: isDebt ? debtorPhone : null,
@@ -104,10 +203,8 @@ export default function SalePage() {
     }).select().single()
 
     for (const item of cart) {
-      // Складта жеткілікті бар ма тексеру
       const { data: prod } = await supabase.from('products').select('quantity').eq('id', item.product.id).single()
       if (!prod || prod.quantity < item.qty) continue
-
       if (isDebt) {
         await supabase.from('debts').insert({
           store_id: store.id, product_id: item.product.id,
@@ -120,11 +217,9 @@ export default function SalePage() {
         await supabase.from('sales').insert({
           store_id: store.id, product_id: item.product.id,
           product_name: item.product.name, quantity: item.qty,
-          amount: item.amount, payment_type: payType,
-          receipt_id: receipt?.id
+          amount: item.amount, payment_type: payType, receipt_id: receipt?.id
         })
       }
-      // Складтан азайту
       await supabase.from('products').update({ quantity: prod.quantity - item.qty }).eq('id', item.product.id)
     }
 
@@ -144,13 +239,12 @@ export default function SalePage() {
 
   return (
     <div>
+      {/* KG Modal */}
       {kgModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: '100%', maxWidth: 320 }}>
             <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{kgModal.name}</div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
-              {lang === 'kz' ? `Қалдық: ${kgModal.quantity} кг` : `Остаток: ${kgModal.quantity} кг`}
-            </div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>{lang === 'kz' ? `Қалдық: ${kgModal.quantity} кг` : `Остаток: ${kgModal.quantity} кг`}</div>
             <input type="number" step="0.001" placeholder="0.000" value={kgValue}
               onChange={e => setKgValue(e.target.value)} autoFocus
               style={{ marginBottom: 8, fontSize: 22, textAlign: 'center', fontWeight: 600 }} />
@@ -167,9 +261,48 @@ export default function SalePage() {
         </div>
       )}
 
-      <input placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
-        value={search} onChange={e => setSearch(e.target.value)} style={{ marginBottom: 8 }} />
+      {/* Сканер */}
+      {scanning && (
+        <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 999, display: 'flex', flexDirection: 'column' }}>
+          <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
+          {/* Сканер рамкасы */}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ width: 260, height: 160, border: '3px solid #fff', borderRadius: 12, boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }} />
+            <div style={{ marginTop: 16, color: '#fff', fontSize: 14, textAlign: 'center', background: 'rgba(0,0,0,0.5)', padding: '6px 16px', borderRadius: 99 }}>
+              {lang === 'kz' ? 'Штрихкодты рамкаға тигізіңіз' : 'Наведите на штрихкод'}
+            </div>
+          </div>
+          {scanMsg && (
+            <div style={{
+              position: 'absolute', bottom: 120, left: 20, right: 20,
+              background: scanMsg.startsWith('✅') ? '#0F6E56' : '#D85A30',
+              color: '#fff', borderRadius: 10, padding: '12px 16px',
+              textAlign: 'center', fontSize: 15, fontWeight: 500
+            }}>
+              {scanMsg}
+            </div>
+          )}
+          <button onClick={stopScanner} style={{
+            position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
+            background: '#fff', border: 'none', borderRadius: 99, padding: '12px 32px',
+            fontSize: 15, fontWeight: 600, cursor: 'pointer'
+          }}>
+            {lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}
+          </button>
+        </div>
+      )}
 
+      {/* Поиск + Сканер */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+        <input placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
+          value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
+        <button onClick={startScanner} style={{
+          padding: '0 14px', borderRadius: 8, border: '1px solid #e5e7eb',
+          background: '#fff', cursor: 'pointer', fontSize: 20, flexShrink: 0
+        }}>📷</button>
+      </div>
+
+      {/* Категориялар */}
       <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6, marginBottom: 10 }}>
         {availableCats.map(c => (
           <button key={c.key} onClick={() => setSelectedCat(c.key)} style={{
@@ -181,11 +314,12 @@ export default function SalePage() {
         ))}
       </div>
 
+      {/* Товарлар */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
         {filtered.map(p => (
           <div key={p.id} onClick={() => addToCart(p)} style={{
             background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
-            padding: '10px 12px', cursor: 'pointer', userSelect: 'none', transition: 'background 0.1s'
+            padding: '10px 12px', cursor: 'pointer', userSelect: 'none'
           }}>
             <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{p.name}</div>
             <div style={{ fontSize: 12, color: '#6b7280' }}>{p.price.toLocaleString()} ₸/{p.unit || 'шт'}</div>
@@ -196,6 +330,7 @@ export default function SalePage() {
         ))}
       </div>
 
+      {/* Корзина */}
       {cart.length > 0 && (
         <div className="card">
           <div className="section-title">{lang === 'kz' ? 'Корзина' : 'Корзина'}</div>
@@ -213,9 +348,9 @@ export default function SalePage() {
                 </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button onClick={() => updateQty(item.product.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                  <button onClick={() => updateQty(item.product.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 16 }}>−</button>
                   <span style={{ minWidth: 24, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{item.qty}</span>
-                  <button onClick={() => updateQty(item.product.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+                  <button onClick={() => updateQty(item.product.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 16 }}>+</button>
                   <span style={{ fontWeight: 600, fontSize: 13, minWidth: 56, textAlign: 'right' }}>{item.amount.toLocaleString()} ₸</span>
                   <span onClick={() => removeFromCart(item.product.id)} style={{ color: '#D85A30', cursor: 'pointer', fontSize: 16 }}>✕</span>
                 </div>
