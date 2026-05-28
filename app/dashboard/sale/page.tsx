@@ -43,6 +43,22 @@ export default function SalePage() {
   const scannerDivRef = useRef<HTMLDivElement>(null)
   const quaggaRef = useRef<any>(null)
   const productsRef = useRef<Product[]>([])
+
+  function playBeep(success = true) {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.frequency.value = success ? 1800 : 400
+      osc.type = 'sine'
+      gain.gain.setValueAtTime(0.3, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (success ? 0.15 : 0.3))
+      osc.start(ctx.currentTime)
+      osc.stop(ctx.currentTime + (success ? 0.15 : 0.3))
+    } catch (e) {}
+  }
   const lastScannedRef = useRef<string>('')
   const lastScannedTimeRef = useRef<number>(0)
 
@@ -115,6 +131,7 @@ export default function SalePage() {
     if (!product) {
       setScanMsg(lang === 'kz' ? `Товар табылмады: ${code}` : `Товар не найден: ${code}`)
       if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+      playBeep(false)
       setTimeout(() => setScanMsg(''), 2500)
       return
     }
