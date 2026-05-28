@@ -57,16 +57,28 @@ export default function SalePage() {
     setProducts(data || [])
   }
 
-  // Штрихкод оқу — ZXing library
   async function startScanner() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          focusMode: 'continuous',
+        } as any
       })
+      // Автофокус қосу
+      const track = stream.getVideoTracks()[0]
+      if (track && 'applyConstraints' in track) {
+        try {
+          await (track as any).applyConstraints({
+            advanced: [{ focusMode: 'continuous' }]
+          })
+        } catch (e) {}
+      }
       streamRef.current = stream
       setScanning(true)
       setScanMsg('')
-
       setTimeout(async () => {
         if (!videoRef.current) return
         videoRef.current.srcObject = stream
@@ -94,18 +106,16 @@ export default function SalePage() {
       animFrameRef.current = requestAnimationFrame(detectBarcodes)
       return
     }
-
     try {
-      // BarcodeDetector API (Chrome mobile)
       if ('BarcodeDetector' in window) {
         const detector = new (window as any).BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'codabar']
         })
+        // Бүкіл видео фреймін сканерлеу — рамка шарты жоқ
         const barcodes = await detector.detect(videoRef.current)
         if (barcodes.length > 0) {
           const code = barcodes[0].rawValue
           const now = Date.now()
-          // Дубликат болдырмау — 2 секунд
           if (code !== lastScannedRef.current || now - lastScannedTimeRef.current > 2000) {
             lastScannedRef.current = code
             lastScannedTimeRef.current = now
@@ -114,7 +124,7 @@ export default function SalePage() {
         }
       }
     } catch (e) {}
-
+    // 60fps жылдамдықта сканерлеу
     animFrameRef.current = requestAnimationFrame(detectBarcodes)
   }, [])
 
@@ -265,11 +275,11 @@ export default function SalePage() {
       {scanning && (
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 999, display: 'flex', flexDirection: 'column' }}>
           <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
-          {/* Сканер рамкасы */}
+              {/* Жай сызық — рамка шарты жоқ */}
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ width: 260, height: 160, border: '3px solid #fff', borderRadius: 12, boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }} />
-            <div style={{ marginTop: 16, color: '#fff', fontSize: 14, textAlign: 'center', background: 'rgba(0,0,0,0.5)', padding: '6px 16px', borderRadius: 99 }}>
-              {lang === 'kz' ? 'Штрихкодты рамкаға тигізіңіз' : 'Наведите на штрихкод'}
+            <div style={{ width: '80%', height: 2, background: 'rgba(255,80,80,0.8)', boxShadow: '0 0 8px rgba(255,80,80,0.8)' }} />
+            <div style={{ marginTop: 20, color: '#fff', fontSize: 14, textAlign: 'center', background: 'rgba(0,0,0,0.6)', padding: '8px 20px', borderRadius: 99 }}>
+              {lang === 'kz' ? '📷 Штрихкодты камераға бағыттаңыз' : '📷 Наведите камеру на штрихкод'}
             </div>
           </div>
           {scanMsg && (
