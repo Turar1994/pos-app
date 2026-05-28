@@ -67,7 +67,6 @@ export default function SalePage() {
 
         await Quagga.init({
           inputStream: {
-            name: 'Live',
             type: 'LiveStream',
             target: scannerDivRef.current!,
             constraints: {
@@ -75,14 +74,14 @@ export default function SalePage() {
               width: { min: 640, ideal: 1280 },
               height: { min: 480, ideal: 720 },
             },
-          },
+          } as any,
           decoder: {
             readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader', 'code_128_reader', 'code_39_reader'],
             multiple: false,
           },
           locate: true,
           frequency: 10,
-        })
+        } as any)
 
         Quagga.start()
 
