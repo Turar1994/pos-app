@@ -44,8 +44,43 @@ export default function SalePage() {
   const quaggaRef = useRef<any>(null)
   const productsRef = useRef<Product[]>([])
 
+  const audioCtxRef = useRef<any>(null)
+
+  function unlockAudio() {
+    // iOS Safari unlock
+    if (!audioCtxRef.current) {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (AudioCtx) {
+        audioCtxRef.current = new AudioCtx()
+        // Silent buffer to unlock
+        const buf = audioCtxRef.current.createBuffer(1, 1, 22050)
+        const src = audioCtxRef.current.createBufferSource()
+        src.buffer = buf
+        src.connect(audioCtxRef.current.destination)
+        src.start(0)
+      }
+    }
+  }
+
   function playBeep(success = true) {
     try {
+      // Method 1: Web Audio API (works when unlocked)
+      if (audioCtxRef.current) {
+        const ctx = audioCtxRef.current
+        if (ctx.state === 'suspended') ctx.resume()
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.frequency.value = success ? 1800 : 400
+        osc.type = 'sine'
+        gain.gain.setValueAtTime(0.4, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + (success ? 0.15 : 0.3))
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + (success ? 0.15 : 0.3))
+        return
+      }
+      // Method 2: Audio file fallback
       const audio = new Audio(success ? '/sounds/beep-success.wav' : '/sounds/beep-error.wav')
       audio.volume = 1.0
       audio.play().catch(() => {})
@@ -64,6 +99,7 @@ export default function SalePage() {
   }
 
   async function startScanner() {
+    unlockAudio() // iOS audio unlock — user gesture кезінде
     setScanning(true)
     setScanMsg('')
     lastScannedRef.current = ''
