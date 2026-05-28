@@ -90,8 +90,20 @@ export default function StockPage() {
   async function startBarcodeScanner() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        } as any
       })
+      const track = stream.getVideoTracks()[0]
+      if (track) {
+        try {
+          await (track as any).applyConstraints({
+            advanced: [{ focusMode: 'continuous' }]
+          })
+        } catch (e) {}
+      }
       streamRef.current = stream
       setScanningBarcode(true)
       setTimeout(async () => {
@@ -122,11 +134,12 @@ export default function StockPage() {
     try {
       if ('BarcodeDetector' in window) {
         const detector = new (window as any).BarcodeDetector({
-          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39']
+          formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'itf', 'codabar']
         })
         const barcodes = await detector.detect(videoRef.current)
         if (barcodes.length > 0) {
           setForm(prev => ({ ...prev, barcode: barcodes[0].rawValue }))
+          if (navigator.vibrate) navigator.vibrate(50)
           stopBarcodeScanner()
           return
         }
@@ -161,9 +174,9 @@ export default function StockPage() {
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
           <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
-            <div style={{ width: 260, height: 160, border: '3px solid #fff', borderRadius: 12, boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }} />
-            <div style={{ marginTop: 16, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.5)', padding: '6px 16px', borderRadius: 99 }}>
-              {lang === 'kz' ? 'Штрихкодты рамкаға тигізіңіз' : 'Наведите на штрихкод'}
+            <div style={{ width: '80%', height: 2, background: 'rgba(255,80,80,0.8)', boxShadow: '0 0 8px rgba(255,80,80,0.8)' }} />
+            <div style={{ marginTop: 20, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.6)', padding: '8px 20px', borderRadius: 99 }}>
+              {lang === 'kz' ? '📷 Штрихкодты камераға бағыттаңыз' : '📷 Наведите камеру на штрихкод'}
             </div>
           </div>
           <button onClick={stopBarcodeScanner} style={{
