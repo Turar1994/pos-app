@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
@@ -34,8 +34,13 @@ export default function StockPage() {
 
   const [form, setForm] = useState({
     name: '', category: 'other', cost_price: '',
-    price: '', quantity: '', unit: 'шт', expiry_date: ''
+    price: '', quantity: '', unit: 'шт', expiry_date: '', barcode: ''
   })
+  const [scanningBarcode, setScanningBarcode] = useState(false)
+  const [scanMsg, setScanMsg] = useState('')
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const animFrameRef = useRef<number>(0)
 
   useEffect(() => { loadProducts() }, [store.id])
 
@@ -53,7 +58,8 @@ export default function StockPage() {
       store_id: store.id, name: form.name.trim(),
       category: form.category, cost_price: parseFloat(form.cost_price) || 0,
       price: parseFloat(form.price), quantity: parseFloat(form.quantity) || 0,
-      unit: form.unit, expiry_date: form.expiry_date || null
+      unit: form.unit, expiry_date: form.expiry_date || null,
+      barcode: form.barcode || null
     }
     if (editId) {
       await supabase.from('products').update(payload).eq('id', editId)
@@ -61,7 +67,7 @@ export default function StockPage() {
     } else {
       await supabase.from('products').insert(payload)
     }
-    setForm({ name: '', category: 'other', cost_price: '', price: '', quantity: '', unit: 'шт', expiry_date: '' })
+    setForm({ name: '', category: 'other', cost_price: '', price: '', quantity: '', unit: 'шт', expiry_date: '', barcode: '' })
     setShowAdd(false); setLoading(false); loadProducts()
   }
 
@@ -77,7 +83,7 @@ export default function StockPage() {
       name: p.name, category: p.category || 'other',
       cost_price: String(p.cost_price || ''), price: String(p.price),
       quantity: String(p.quantity), unit: p.unit || 'шт',
-      expiry_date: p.expiry_date || ''
+      expiry_date: p.expiry_date || '', barcode: (p as any).barcode || ''
     })
     setShowAdd(true)
   }
@@ -101,8 +107,63 @@ export default function StockPage() {
     return acc
   }, {} as Record<string, number>)
 
+  async function startBarcodeScanner() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
+      streamRef.current = stream
+      setScanningBarcode(true)
+      setScanMsg('')
+      setTimeout(async () => {
+        if (!videoRef.current) return
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
+        detectBarcode()
+      }, 100)
+    } catch (e) {
+      setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
+    }
+  }
+
+  function stopBarcodeScanner() {
+    cancelAnimationFrame(animFrameRef.current)
+    if (streamRef.current) { streamRef.current.getTracks().forEach(t => t.stop()); streamRef.current = null }
+    setScanningBarcode(false); setScanMsg('')
+  }
+
+  async function detectBarcode() {
+    if (!videoRef.current || videoRef.current.readyState < 2) {
+      animFrameRef.current = requestAnimationFrame(detectBarcode); return
+    }
+    try {
+      if ('BarcodeDetector' in window) {
+        const detector = new (window as any).BarcodeDetector({ formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'] })
+        const barcodes = await detector.detect(videoRef.current)
+        if (barcodes.length > 0) {
+          setForm(prev => ({ ...prev, barcode: barcodes[0].rawValue }))
+          stopBarcodeScanner()
+          return
+        }
+      }
+    } catch (e) {}
+    animFrameRef.current = requestAnimationFrame(detectBarcode)
+  }
+
   return (
     <div>
+      {scanningBarcode && (
+        <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
+          <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ width: 260, height: 160, border: '3px solid #fff', borderRadius: 12, boxShadow: '0 0 0 9999px rgba(0,0,0,0.5)' }} />
+            <div style={{ marginTop: 16, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.5)', padding: '6px 16px', borderRadius: 99 }}>
+              {lang === 'kz' ? 'Штрихкодты рамкаға тигізіңіз' : 'Наведите на штрихкод'}
+            </div>
+          </div>
+          <button onClick={stopBarcodeScanner} style={{ position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)', background: '#fff', border: 'none', borderRadius: 99, padding: '12px 32px', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>
+            {lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}
+          </button>
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
         <input placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
           value={search} onChange={e => setSearch(e.target.value)}
@@ -148,6 +209,13 @@ export default function StockPage() {
             <div>
               <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>{lang === 'kz' ? 'Жарамдылық мерзімі (міндетті емес)' : 'Срок годности (необязательно)'}</label>
               <input type="date" value={form.expiry_date} onChange={e => setForm({ ...form, expiry_date: e.target.value })} />
+            </div>
+            <div>
+              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>{lang === 'kz' ? 'Штрихкод (міндетті емес)' : 'Штрихкод (необязательно)'}</label>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input placeholder="1234567890123" value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} style={{ flex: 1 }} />
+                <button type="button" onClick={startBarcodeScanner} style={{ padding: '0 12px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 18, flexShrink: 0 }}>📷</button>
+              </div>
             </div>
             <div className="row-2">
               <button className="btn btn-primary" onClick={saveProduct} disabled={loading}>
