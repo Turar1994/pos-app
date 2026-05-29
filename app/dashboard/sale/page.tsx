@@ -39,52 +39,65 @@ export default function SalePage() {
   const [dueDate, setDueDate] = useState('')
   const [scanning, setScanning] = useState(false)
   const [scanMsg, setScanMsg] = useState('')
+  const [scanSuccess, setScanSuccess] = useState(false)
+  const [torchOn, setTorchOn] = useState(false)
+  const [failCount, setFailCount] = useState(0)
 
   const scannerDivRef = useRef<HTMLDivElement>(null)
   const quaggaRef = useRef<any>(null)
   const productsRef = useRef<Product[]>([])
-
+  const lastScannedRef = useRef<string>('')
+  const lastScannedTimeRef = useRef<number>(0)
   const audioCtxRef = useRef<any>(null)
+  const failTimerRef = useRef<any>(null)
+
+  useEffect(() => { loadProducts() }, [store.id])
+  useEffect(() => { productsRef.current = products }, [products])
+
+  async function loadProducts() {
+    const supabase = createClient()
+    const { data } = await supabase.from('products').select('*')
+      .eq('store_id', store.id).gt('quantity', 0).order('name')
+    setProducts(data || [])
+  }
 
   function unlockAudio() {
-    // iOS Safari unlock
-    if (!audioCtxRef.current) {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
-      if (AudioCtx) {
-        audioCtxRef.current = new AudioCtx()
-        // Silent buffer to unlock
+    try {
+      if (!audioCtxRef.current) {
+        const AC = window.AudioContext || (window as any).webkitAudioContext
+        if (!AC) return
+        audioCtxRef.current = new AC()
         const buf = audioCtxRef.current.createBuffer(1, 1, 22050)
         const src = audioCtxRef.current.createBufferSource()
         src.buffer = buf
         src.connect(audioCtxRef.current.destination)
         src.start(0)
       }
-    }
+    } catch (e) {}
   }
 
   function playBeep(success = true) {
     try {
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
-      const ctx = audioCtxRef.current || new AudioCtx()
+      const AC = window.AudioContext || (window as any).webkitAudioContext
+      const ctx = audioCtxRef.current || (AC ? new AC() : null)
+      if (!ctx) return
       audioCtxRef.current = ctx
       if (ctx.state === 'suspended') ctx.resume()
 
       if (success) {
-        // Табылды — екі жоғары нота "ти-ти" (sine — iOS-та жұмыс істейді)
-        [0, 0.13].forEach((delay, i) => {
+        [0, 0.14].forEach((delay, i) => {
           const osc = ctx.createOscillator()
           const gain = ctx.createGain()
           osc.connect(gain)
           gain.connect(ctx.destination)
           osc.frequency.value = i === 0 ? 1200 : 1600
           osc.type = 'sine'
-          gain.gain.setValueAtTime(0.5, ctx.currentTime + delay)
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.12)
+          gain.gain.setValueAtTime(0.6, ctx.currentTime + delay)
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.13)
           osc.start(ctx.currentTime + delay)
-          osc.stop(ctx.currentTime + delay + 0.12)
+          osc.stop(ctx.currentTime + delay + 0.13)
         })
       } else {
-        // Табылмады — бір төмен нота "туу"
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
         osc.connect(gain)
@@ -98,22 +111,13 @@ export default function SalePage() {
       }
     } catch (e) {}
   }
-  const lastScannedRef = useRef<string>('')
-  const lastScannedTimeRef = useRef<number>(0)
-
-  useEffect(() => { loadProducts() }, [store.id])
-  useEffect(() => { productsRef.current = products }, [products])
-
-  async function loadProducts() {
-    const supabase = createClient()
-    const { data } = await supabase.from('products').select('*').eq('store_id', store.id).gt('quantity', 0).order('name')
-    setProducts(data || [])
-  }
 
   async function startScanner() {
-    unlockAudio() // iOS audio unlock — user gesture кезінде
+    unlockAudio()
     setScanning(true)
     setScanMsg('')
+    setScanSuccess(false)
+    setFailCount(0)
     lastScannedRef.current = ''
 
     setTimeout(async () => {
@@ -127,40 +131,64 @@ export default function SalePage() {
             target: scannerDivRef.current!,
             constraints: {
               facingMode: 'environment',
-              width: { min: 1280, ideal: 1920 },
-              height: { min: 720, ideal: 1080 },
-              focusMode: 'continuous',
-              advanced: [{ focusMode: 'continuous' }],
+              width: { min: 640, ideal: 1280, max: 1920 },
+              height: { min: 480, ideal: 720, max: 1080 },
+            },
+            area: {
+              top: '25%',
+              right: '10%',
+              left: '10%',
+              bottom: '25%',
             },
           } as any,
           decoder: {
-            readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader', 'code_128_reader', 'code_39_reader'],
+            readers: [
+              'ean_reader',
+              'ean_8_reader',
+              'upc_reader',
+              'upc_e_reader',
+              'code_128_reader',
+            ],
             multiple: false,
           },
           locate: true,
-          frequency: 15,
+          frequency: 10,
           locator: {
             patchSize: 'medium',
-            halfSample: false,
+            halfSample: true,
           },
         } as any)
 
-        // Автофокус track-ке тікелей қосу
-        Quagga.CameraAccess.getActiveTrack()?.applyConstraints?.({
-          advanced: [{ focusMode: 'continuous' } as any]
-        }).catch(() => {})
-
         Quagga.start()
+
+        // Автофокус
+        try {
+          const track = Quagga.CameraAccess.getActiveTrack()
+          if (track) {
+            await (track as any).applyConstraints({
+              advanced: [{ focusMode: 'continuous' }]
+            })
+          }
+        } catch (e) {}
+
+        // Fail counter — 5 секундта табылмаса hint көрсету
+        failTimerRef.current = setInterval(() => {
+          setFailCount(prev => prev + 1)
+        }, 5000)
 
         Quagga.onDetected((result: any) => {
           const code = result?.codeResult?.code
           if (!code) return
+
+          // Debounce — 1200ms
           const now = Date.now()
-          if (code === lastScannedRef.current && now - lastScannedTimeRef.current < 2000) return
+          if (code === lastScannedRef.current && now - lastScannedTimeRef.current < 1200) return
           lastScannedRef.current = code
           lastScannedTimeRef.current = now
+
           handleBarcode(code)
         })
+
       } catch (e) {
         setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
       }
@@ -168,29 +196,46 @@ export default function SalePage() {
   }
 
   function stopScanner() {
+    if (failTimerRef.current) { clearInterval(failTimerRef.current); failTimerRef.current = null }
     if (quaggaRef.current) {
       try { quaggaRef.current.stop() } catch (e) {}
       quaggaRef.current = null
     }
     setScanning(false)
     setScanMsg('')
+    setScanSuccess(false)
+    setTorchOn(false)
+    setFailCount(0)
     lastScannedRef.current = ''
+  }
+
+  async function toggleTorch() {
+    try {
+      const track = quaggaRef.current?.CameraAccess?.getActiveTrack()
+      if (!track) return
+      const newVal = !torchOn
+      await (track as any).applyConstraints({ advanced: [{ torch: newVal }] })
+      setTorchOn(newVal)
+    } catch (e) {}
   }
 
   function handleBarcode(code: string) {
     const product = productsRef.current.find(p => p.barcode === code)
     if (!product) {
-      setScanMsg(lang === 'kz' ? `Товар табылмады: ${code}` : `Товар не найден: ${code}`)
+      setScanMsg(lang === 'kz' ? `Табылмады: ${code}` : `Не найден: ${code}`)
+      setScanSuccess(false)
       if (navigator.vibrate) navigator.vibrate([100, 50, 100])
       playBeep(false)
-      setTimeout(() => setScanMsg(''), 2500)
+      setTimeout(() => setScanMsg(''), 2000)
       return
     }
+
     if (product.unit === 'кг') {
       stopScanner()
       setKgModal(product); setKgValue('')
       return
     }
+
     setCart(prev => {
       const existing = prev.find(c => c.product.id === product.id)
       if (existing) {
@@ -200,9 +245,12 @@ export default function SalePage() {
       }
       return [...prev, { product, qty: 1, amount: product.price }]
     })
-    setScanMsg(`\u2705 ${product.name}`)
-    if (navigator.vibrate) navigator.vibrate(50)
-    setTimeout(() => setScanMsg(''), 1500)
+
+    setScanMsg(`✅ ${product.name}`)
+    setScanSuccess(true)
+    if (navigator.vibrate) navigator.vibrate(60)
+    playBeep(true)
+    setTimeout(() => { setScanMsg(''); setScanSuccess(false) }, 1200)
   }
 
   function addToCart(product: Product) {
@@ -278,7 +326,7 @@ export default function SalePage() {
       await supabase.from('products').update({ quantity: prod.quantity - item.qty }).eq('id', item.product.id)
     }
     setCart([]); setDebtorName(''); setDebtorPhone(''); setDueDate(''); setShowDebtForm(false)
-    setSuccess(isDebt ? (lang === 'kz' ? '\u2705 Қарыз тіркелді!' : '\u2705 Долг записан!') : (lang === 'kz' ? '\u2705 Сатылды!' : '\u2705 Продано!'))
+    setSuccess(isDebt ? (lang === 'kz' ? '✅ Қарыз тіркелді!' : '✅ Долг записан!') : (lang === 'kz' ? '✅ Сатылды!' : '✅ Продано!'))
     setTimeout(() => setSuccess(''), 2000)
     setLoading(false); triggerRefresh(); loadProducts()
   }
@@ -290,13 +338,20 @@ export default function SalePage() {
   })
   const availableCats = CATEGORIES.filter(c => c.key === 'all' || products.some(p => p.category === c.key))
 
+  // Hint message
+  const hintMsg = failCount >= 1
+    ? (lang === 'kz' ? '💡 Жарықты қосыңыз немесе жақынырақ апарыңыз' : '💡 Включите свет или поднесите ближе')
+    : (lang === 'kz' ? '📷 Штрихкодты рамкаға бағыттаңыз' : '📷 Наведите штрихкод на рамку')
+
   return (
     <div>
       {kgModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: '100%', maxWidth: 320 }}>
             <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{kgModal.name}</div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>{lang === 'kz' ? `Қалдық: ${kgModal.quantity} кг` : `Остаток: ${kgModal.quantity} кг`}</div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+              {lang === 'kz' ? `Қалдық: ${kgModal.quantity} кг` : `Остаток: ${kgModal.quantity} кг`}
+            </div>
             <input type="number" step="0.001" placeholder="0.000" value={kgValue}
               onChange={e => setKgValue(e.target.value)} autoFocus
               style={{ marginBottom: 8, fontSize: 22, textAlign: 'center', fontWeight: 600 }} />
@@ -316,30 +371,79 @@ export default function SalePage() {
       {scanning && (
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 999, display: 'flex', flexDirection: 'column' }}>
           <div ref={scannerDivRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }} />
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+
+          {/* Overlay */}
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            {/* Рамка */}
             <div style={{
               width: 280, height: 140,
-              border: '3px solid rgba(255,80,80,0.9)',
-              borderRadius: 12,
-              boxShadow: '0 0 0 9999px rgba(0,0,0,0.55), 0 0 20px rgba(255,80,80,0.5)'
-            }} />
-            <div style={{ marginTop: 16, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.6)', padding: '8px 20px', borderRadius: 99 }}>
-              {lang === 'kz' ? '📷 Штрихкодты рамкаға бағыттаңыз' : '📷 Наведите штрихкод на рамку'}
+              border: `3px solid ${scanSuccess ? '#0F6E56' : 'rgba(255,80,80,0.9)'}`,
+              borderRadius: 14,
+              boxShadow: `0 0 0 9999px rgba(0,0,0,0.55), 0 0 20px ${scanSuccess ? 'rgba(15,110,86,0.6)' : 'rgba(255,80,80,0.4)'}`,
+              transition: 'border-color 0.2s, box-shadow 0.2s',
+              position: 'relative',
+            }}>
+              {/* Бұрыш белгілері */}
+              {[
+                { top: -3, left: -3, borderTop: '4px solid', borderLeft: '4px solid', borderRadius: '4px 0 0 0' },
+                { top: -3, right: -3, borderTop: '4px solid', borderRight: '4px solid', borderRadius: '0 4px 0 0' },
+                { bottom: -3, left: -3, borderBottom: '4px solid', borderLeft: '4px solid', borderRadius: '0 0 0 4px' },
+                { bottom: -3, right: -3, borderBottom: '4px solid', borderRight: '4px solid', borderRadius: '0 0 4px 0' },
+              ].map((s, i) => (
+                <div key={i} style={{
+                  position: 'absolute', width: 20, height: 20,
+                  borderColor: scanSuccess ? '#0F6E56' : '#fff',
+                  ...s
+                }} />
+              ))}
+              {/* Сканер сызығы */}
+              {!scanSuccess && (
+                <div style={{
+                  position: 'absolute', top: '50%', left: 4, right: 4, height: 2,
+                  background: 'rgba(255,80,80,0.8)',
+                  boxShadow: '0 0 6px rgba(255,80,80,0.8)',
+                  animation: 'none'
+                }} />
+              )}
+            </div>
+
+            {/* Hint */}
+            <div style={{
+              marginTop: 16, color: '#fff', fontSize: 13,
+              background: 'rgba(0,0,0,0.65)', padding: '8px 18px', borderRadius: 99,
+              textAlign: 'center', maxWidth: 300
+            }}>
+              {scanMsg || hintMsg}
             </div>
           </div>
+
+          {/* Хабарлама */}
           {scanMsg && (
             <div style={{
-              position: 'absolute', bottom: 120, left: 20, right: 20,
-              background: scanMsg.startsWith('\u2705') ? '#0F6E56' : '#D85A30',
-              color: '#fff', borderRadius: 10, padding: '12px 16px',
-              textAlign: 'center', fontSize: 15, fontWeight: 500
+              position: 'absolute', bottom: 130, left: 20, right: 20,
+              background: scanSuccess ? '#0F6E56' : '#D85A30',
+              color: '#fff', borderRadius: 12, padding: '14px 16px',
+              textAlign: 'center', fontSize: 16, fontWeight: 600,
+              transition: 'background 0.2s'
             }}>{scanMsg}</div>
           )}
-          <button onClick={stopScanner} style={{
-            position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
-            background: '#fff', border: 'none', borderRadius: 99, padding: '12px 32px',
-            fontSize: 15, fontWeight: 600, cursor: 'pointer'
-          }}>{lang === 'kz' ? '\u2715 Жабу' : '\u2715 Закрыть'}</button>
+
+          {/* Батырмалар */}
+          <div style={{ position: 'absolute', bottom: 40, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 16, padding: '0 20px' }}>
+            <button onClick={toggleTorch} style={{
+              background: torchOn ? '#F59E0B' : 'rgba(255,255,255,0.15)',
+              border: '2px solid rgba(255,255,255,0.3)', borderRadius: 99,
+              padding: '12px 24px', fontSize: 20, cursor: 'pointer', color: '#fff'
+            }}>
+              {torchOn ? '🔦' : '💡'}
+            </button>
+            <button onClick={stopScanner} style={{
+              background: '#fff', border: 'none', borderRadius: 99,
+              padding: '12px 40px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
+            }}>
+              {lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -415,10 +519,9 @@ export default function SalePage() {
           {success && <div style={{ background: '#E1F5EE', borderRadius: 6, padding: '8px 12px', color: '#085041', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>{success}</div>}
           <div className="row-2">
             <button className="btn btn-success" onClick={() => handleSale(false)} disabled={loading}>
-              {loading ? T.loading : (lang === 'kz' ? '\u2713 Сату' : '\u2713 Продать')}
+              {loading ? T.loading : (lang === 'kz' ? '✓ Сату' : '✓ Продать')}
             </button>
-            <button className="btn" onClick={() => setShowDebtForm(!showDebtForm)}
-              style={{ borderColor: '#D97706', color: '#D97706' }}>
+            <button className="btn" onClick={() => setShowDebtForm(!showDebtForm)} style={{ borderColor: '#D97706', color: '#D97706' }}>
               💳 {lang === 'kz' ? 'Қарызға' : 'В долг'}
             </button>
           </div>
