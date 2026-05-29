@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useRef, useCallback } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
@@ -41,15 +41,17 @@ export default function SalePage() {
   const [scanMsg, setScanMsg] = useState('')
   const [scanSuccess, setScanSuccess] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
-  const [failCount, setFailCount] = useState(0)
+  const [hint, setHint] = useState(0)
 
-  const scannerDivRef = useRef<HTMLDivElement>(null)
-  const quaggaRef = useRef<any>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const readerRef = useRef<any>(null)
   const productsRef = useRef<Product[]>([])
   const lastScannedRef = useRef<string>('')
-  const lastScannedTimeRef = useRef<number>(0)
+  const lastTimeRef = useRef<number>(0)
   const audioCtxRef = useRef<any>(null)
-  const failTimerRef = useRef<any>(null)
+  const hintTimerRef = useRef<any>(null)
+  const scanningRef = useRef(false)
 
   useEffect(() => { loadProducts() }, [store.id])
   useEffect(() => { productsRef.current = products }, [products])
@@ -63,51 +65,42 @@ export default function SalePage() {
 
   function unlockAudio() {
     try {
-      if (!audioCtxRef.current) {
-        const AC = window.AudioContext || (window as any).webkitAudioContext
-        if (!AC) return
-        audioCtxRef.current = new AC()
-        const buf = audioCtxRef.current.createBuffer(1, 1, 22050)
-        const src = audioCtxRef.current.createBufferSource()
-        src.buffer = buf
-        src.connect(audioCtxRef.current.destination)
-        src.start(0)
-      }
+      if (audioCtxRef.current) return
+      const AC = window.AudioContext || (window as any).webkitAudioContext
+      if (!AC) return
+      audioCtxRef.current = new AC()
+      const buf = audioCtxRef.current.createBuffer(1, 1, 22050)
+      const src = audioCtxRef.current.createBufferSource()
+      src.buffer = buf
+      src.connect(audioCtxRef.current.destination)
+      src.start(0)
     } catch (e) {}
   }
 
-  function playBeep(success = true) {
+  function playBeep(ok = true) {
     try {
       const AC = window.AudioContext || (window as any).webkitAudioContext
       const ctx = audioCtxRef.current || (AC ? new AC() : null)
       if (!ctx) return
       audioCtxRef.current = ctx
       if (ctx.state === 'suspended') ctx.resume()
-
-      if (success) {
-        [0, 0.14].forEach((delay, i) => {
-          const osc = ctx.createOscillator()
-          const gain = ctx.createGain()
-          osc.connect(gain)
-          gain.connect(ctx.destination)
-          osc.frequency.value = i === 0 ? 1200 : 1600
-          osc.type = 'sine'
-          gain.gain.setValueAtTime(0.6, ctx.currentTime + delay)
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.13)
-          osc.start(ctx.currentTime + delay)
-          osc.stop(ctx.currentTime + delay + 0.13)
+      if (ok) {
+        [0, 0.14].forEach((d, i) => {
+          const o = ctx.createOscillator(), g = ctx.createGain()
+          o.connect(g); g.connect(ctx.destination)
+          o.frequency.value = i === 0 ? 1200 : 1600
+          o.type = 'sine'
+          g.gain.setValueAtTime(0.5, ctx.currentTime + d)
+          g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + d + 0.13)
+          o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + 0.13)
         })
       } else {
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-        osc.connect(gain)
-        gain.connect(ctx.destination)
-        osc.frequency.value = 300
-        osc.type = 'sine'
-        gain.gain.setValueAtTime(0.5, ctx.currentTime)
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
-        osc.start(ctx.currentTime)
-        osc.stop(ctx.currentTime + 0.35)
+        const o = ctx.createOscillator(), g = ctx.createGain()
+        o.connect(g); g.connect(ctx.destination)
+        o.frequency.value = 300; o.type = 'sine'
+        g.gain.setValueAtTime(0.5, ctx.currentTime)
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
+        o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.35)
       }
     } catch (e) {}
   }
@@ -115,103 +108,82 @@ export default function SalePage() {
   async function startScanner() {
     unlockAudio()
     setScanning(true)
+    scanningRef.current = true
     setScanMsg('')
     setScanSuccess(false)
-    setFailCount(0)
+    setHint(0)
     lastScannedRef.current = ''
 
-    setTimeout(async () => {
+    hintTimerRef.current = setTimeout(() => setHint(1), 6000)
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        }
+      })
+
+      // Continuous autofocus
+      const track = stream.getVideoTracks()[0]
       try {
-        const Quagga = (await import('@ericblade/quagga2')).default
-        quaggaRef.current = Quagga
-
-        await Quagga.init({
-          inputStream: {
-            type: 'LiveStream',
-            target: scannerDivRef.current!,
-            constraints: {
-              facingMode: 'environment',
-              width: { min: 640, ideal: 1280, max: 1920 },
-              height: { min: 480, ideal: 720, max: 1080 },
-            },
-            area: {
-              top: '25%',
-              right: '10%',
-              left: '10%',
-              bottom: '25%',
-            },
-          } as any,
-          decoder: {
-            readers: [
-              'ean_reader',
-              'ean_8_reader',
-              'upc_reader',
-              'upc_e_reader',
-              'code_128_reader',
-            ],
-            multiple: false,
-          },
-          locate: true,
-          frequency: 10,
-          locator: {
-            patchSize: 'medium',
-            halfSample: true,
-          },
-        } as any)
-
-        Quagga.start()
-
-        // Автофокус
-        try {
-          const track = Quagga.CameraAccess.getActiveTrack()
-          if (track) {
-            await (track as any).applyConstraints({
-              advanced: [{ focusMode: 'continuous' }]
-            })
-          }
-        } catch (e) {}
-
-        // Fail counter — 5 секундта табылмаса hint көрсету
-        failTimerRef.current = setInterval(() => {
-          setFailCount(prev => prev + 1)
-        }, 5000)
-
-        Quagga.onDetected((result: any) => {
-          const code = result?.codeResult?.code
-          if (!code) return
-
-          // Debounce — 1200ms
-          const now = Date.now()
-          if (code === lastScannedRef.current && now - lastScannedTimeRef.current < 1200) return
-          lastScannedRef.current = code
-          lastScannedTimeRef.current = now
-
-          handleBarcode(code)
+        await (track as any).applyConstraints({
+          advanced: [{ focusMode: 'continuous' }]
         })
+      } catch (e) {}
 
-      } catch (e) {
-        setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
+      streamRef.current = stream
+
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
       }
-    }, 300)
+
+      // ZXing reader
+      const { BrowserMultiFormatReader, NotFoundException } = await import('@zxing/library')
+      const reader = new BrowserMultiFormatReader()
+      readerRef.current = reader
+
+      reader.decodeFromStream(stream, videoRef.current!, (result, err) => {
+        if (!scanningRef.current) return
+        if (result) {
+          const code = result.getText()
+          const now = Date.now()
+          if (code === lastScannedRef.current && now - lastTimeRef.current < 1200) return
+          lastScannedRef.current = code
+          lastTimeRef.current = now
+          handleBarcode(code)
+        }
+      })
+
+    } catch (e) {
+      setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
+    }
   }
 
   function stopScanner() {
-    if (failTimerRef.current) { clearInterval(failTimerRef.current); failTimerRef.current = null }
-    if (quaggaRef.current) {
-      try { quaggaRef.current.stop() } catch (e) {}
-      quaggaRef.current = null
+    scanningRef.current = false
+    if (hintTimerRef.current) { clearTimeout(hintTimerRef.current); hintTimerRef.current = null }
+    if (readerRef.current) {
+      try { readerRef.current.reset() } catch (e) {}
+      readerRef.current = null
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
     }
     setScanning(false)
     setScanMsg('')
     setScanSuccess(false)
     setTorchOn(false)
-    setFailCount(0)
+    setHint(0)
     lastScannedRef.current = ''
   }
 
   async function toggleTorch() {
     try {
-      const track = quaggaRef.current?.CameraAccess?.getActiveTrack()
+      const track = streamRef.current?.getVideoTracks()[0]
       if (!track) return
       const newVal = !torchOn
       await (track as any).applyConstraints({ advanced: [{ torch: newVal }] })
@@ -229,23 +201,20 @@ export default function SalePage() {
       setTimeout(() => setScanMsg(''), 2000)
       return
     }
-
     if (product.unit === 'кг') {
       stopScanner()
       setKgModal(product); setKgValue('')
       return
     }
-
     setCart(prev => {
-      const existing = prev.find(c => c.product.id === product.id)
-      if (existing) {
-        if (existing.qty >= product.quantity) return prev
+      const ex = prev.find(c => c.product.id === product.id)
+      if (ex) {
+        if (ex.qty >= product.quantity) return prev
         return prev.map(c => c.product.id === product.id
           ? { ...c, qty: c.qty + 1, amount: (c.qty + 1) * product.price } : c)
       }
       return [...prev, { product, qty: 1, amount: product.price }]
     })
-
     setScanMsg(`✅ ${product.name}`)
     setScanSuccess(true)
     if (navigator.vibrate) navigator.vibrate(60)
@@ -255,9 +224,9 @@ export default function SalePage() {
 
   function addToCart(product: Product) {
     if (product.unit === 'кг') { setKgModal(product); setKgValue(''); return }
-    const existing = cart.find(c => c.product.id === product.id)
-    if (existing) {
-      if (existing.qty >= product.quantity) return
+    const ex = cart.find(c => c.product.id === product.id)
+    if (ex) {
+      if (ex.qty >= product.quantity) return
       setCart(cart.map(c => c.product.id === product.id
         ? { ...c, qty: c.qty + 1, amount: (c.qty + 1) * product.price } : c))
     } else {
@@ -269,8 +238,8 @@ export default function SalePage() {
     if (!kgModal || !kgValue) return
     const qty = parseFloat(kgValue)
     if (isNaN(qty) || qty <= 0 || qty > kgModal.quantity) return
-    const existing = cart.find(c => c.product.id === kgModal.id)
-    if (existing) {
+    const ex = cart.find(c => c.product.id === kgModal.id)
+    if (ex) {
       setCart(cart.map(c => c.product.id === kgModal.id
         ? { ...c, qty: +(c.qty + qty).toFixed(3), amount: +((c.qty + qty) * kgModal.price).toFixed(0) } : c))
     } else {
@@ -284,17 +253,16 @@ export default function SalePage() {
   function updateQty(id: string, delta: number) {
     setCart(cart.map(c => {
       if (c.product.id !== id) return c
-      const newQty = Math.max(1, c.qty + delta)
-      if (newQty > c.product.quantity) return c
-      return { ...c, qty: newQty, amount: newQty * c.product.price }
+      const nq = Math.max(1, c.qty + delta)
+      if (nq > c.product.quantity) return c
+      return { ...c, qty: nq, amount: nq * c.product.price }
     }))
   }
 
   const totalAmount = cart.reduce((s, c) => s + c.amount, 0)
 
   async function handleSale(isDebt = false) {
-    if (cart.length === 0) return
-    if (isDebt && !debtorName) return
+    if (cart.length === 0 || (isDebt && !debtorName)) return
     setLoading(true)
     const supabase = createClient()
     const { data: receipt } = await supabase.from('receipts').insert({
@@ -331,16 +299,13 @@ export default function SalePage() {
     setLoading(false); triggerRefresh(); loadProducts()
   }
 
-  const filtered = products.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
-    const matchCat = selectedCat === 'all' || p.category === selectedCat
-    return matchSearch && matchCat
-  })
+  const filtered = products.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) &&
+    (selectedCat === 'all' || p.category === selectedCat)
+  )
   const availableCats = CATEGORIES.filter(c => c.key === 'all' || products.some(p => p.category === c.key))
-
-  // Hint message
-  const hintMsg = failCount >= 1
-    ? (lang === 'kz' ? '💡 Жарықты қосыңыз немесе жақынырақ апарыңыз' : '💡 Включите свет или поднесите ближе')
+  const hintText = hint >= 1
+    ? (lang === 'kz' ? '💡 Жарықты қосыңыз немесе жақынырақ апарыңыз' : '💡 Включите фонарик или поднесите ближе')
     : (lang === 'kz' ? '📷 Штрихкодты рамкаға бағыттаңыз' : '📷 Наведите штрихкод на рамку')
 
   return (
@@ -370,20 +335,18 @@ export default function SalePage() {
 
       {scanning && (
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 999, display: 'flex', flexDirection: 'column' }}>
-          <div ref={scannerDivRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }} />
+          <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
 
-          {/* Overlay */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             {/* Рамка */}
             <div style={{
               width: 280, height: 140,
               border: `3px solid ${scanSuccess ? '#0F6E56' : 'rgba(255,80,80,0.9)'}`,
               borderRadius: 14,
-              boxShadow: `0 0 0 9999px rgba(0,0,0,0.55), 0 0 20px ${scanSuccess ? 'rgba(15,110,86,0.6)' : 'rgba(255,80,80,0.4)'}`,
-              transition: 'border-color 0.2s, box-shadow 0.2s',
+              boxShadow: `0 0 0 9999px rgba(0,0,0,0.5), 0 0 20px ${scanSuccess ? 'rgba(15,110,86,0.5)' : 'rgba(255,80,80,0.3)'}`,
               position: 'relative',
+              transition: 'all 0.2s',
             }}>
-              {/* Бұрыш белгілері */}
               {[
                 { top: -3, left: -3, borderTop: '4px solid', borderLeft: '4px solid', borderRadius: '4px 0 0 0' },
                 { top: -3, right: -3, borderTop: '4px solid', borderRight: '4px solid', borderRadius: '0 4px 0 0' },
@@ -391,58 +354,46 @@ export default function SalePage() {
                 { bottom: -3, right: -3, borderBottom: '4px solid', borderRight: '4px solid', borderRadius: '0 0 4px 0' },
               ].map((s, i) => (
                 <div key={i} style={{
-                  position: 'absolute', width: 20, height: 20,
-                  borderColor: scanSuccess ? '#0F6E56' : '#fff',
-                  ...s
+                  position: 'absolute', width: 22, height: 22,
+                  borderColor: scanSuccess ? '#0F6E56' : '#fff', ...s
                 }} />
               ))}
-              {/* Сканер сызығы */}
               {!scanSuccess && (
                 <div style={{
-                  position: 'absolute', top: '50%', left: 4, right: 4, height: 2,
-                  background: 'rgba(255,80,80,0.8)',
-                  boxShadow: '0 0 6px rgba(255,80,80,0.8)',
-                  animation: 'none'
+                  position: 'absolute', top: '50%', left: 6, right: 6, height: 2,
+                  background: 'rgba(255,80,80,0.75)',
+                  boxShadow: '0 0 6px rgba(255,80,80,0.6)',
                 }} />
               )}
             </div>
-
-            {/* Hint */}
             <div style={{
               marginTop: 16, color: '#fff', fontSize: 13,
-              background: 'rgba(0,0,0,0.65)', padding: '8px 18px', borderRadius: 99,
-              textAlign: 'center', maxWidth: 300
+              background: 'rgba(0,0,0,0.65)', padding: '8px 18px',
+              borderRadius: 99, maxWidth: 300, textAlign: 'center'
             }}>
-              {scanMsg || hintMsg}
+              {scanMsg || hintText}
             </div>
           </div>
 
-          {/* Хабарлама */}
           {scanMsg && (
             <div style={{
               position: 'absolute', bottom: 130, left: 20, right: 20,
               background: scanSuccess ? '#0F6E56' : '#D85A30',
-              color: '#fff', borderRadius: 12, padding: '14px 16px',
+              color: '#fff', borderRadius: 12, padding: '14px',
               textAlign: 'center', fontSize: 16, fontWeight: 600,
-              transition: 'background 0.2s'
             }}>{scanMsg}</div>
           )}
 
-          {/* Батырмалар */}
-          <div style={{ position: 'absolute', bottom: 40, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 16, padding: '0 20px' }}>
+          <div style={{ position: 'absolute', bottom: 44, left: 0, right: 0, display: 'flex', justifyContent: 'center', gap: 16 }}>
             <button onClick={toggleTorch} style={{
               background: torchOn ? '#F59E0B' : 'rgba(255,255,255,0.15)',
               border: '2px solid rgba(255,255,255,0.3)', borderRadius: 99,
               padding: '12px 24px', fontSize: 20, cursor: 'pointer', color: '#fff'
-            }}>
-              {torchOn ? '🔦' : '💡'}
-            </button>
+            }}>{torchOn ? '🔦' : '💡'}</button>
             <button onClick={stopScanner} style={{
               background: '#fff', border: 'none', borderRadius: 99,
               padding: '12px 40px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
-            }}>
-              {lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}
-            </button>
+            }}>{lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}</button>
           </div>
         </div>
       )}
