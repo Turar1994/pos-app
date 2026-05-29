@@ -31,9 +31,13 @@ export default function StockPage() {
   const [showAdd, setShowAdd] = useState(false)
   const [loading, setLoading] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
-  const [scanningBarcode, setScanningBarcode] = useState(false)
-  const scannerDivRef = useRef<HTMLDivElement>(null)
-  const quaggaRef = useRef<any>(null)
+  const [scanning, setScanning] = useState(false)
+  const [scanMsg, setScanMsg] = useState('')
+
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const readerRef = useRef<any>(null)
+  const scanningRef = useRef(false)
 
   const [form, setForm] = useState({
     name: '', category: 'other', cost_price: '',
@@ -84,62 +88,66 @@ export default function StockPage() {
       expiry_date: p.expiry_date || '', barcode: p.barcode || ''
     })
     setShowAdd(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  async function startBarcodeScanner() {
-    setScanningBarcode(true)
-    setTimeout(async () => {
+  async function startScanner() {
+    setScanning(true)
+    scanningRef.current = true
+    setScanMsg('')
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        }
+      })
+      const track = stream.getVideoTracks()[0]
       try {
-        const Quagga = (await import('@ericblade/quagga2')).default
-        quaggaRef.current = Quagga
-        await Quagga.init({
-          inputStream: {
-            type: 'LiveStream',
-            target: scannerDivRef.current!,
-            constraints: {
-              facingMode: 'environment',
-              width: { min: 1280, ideal: 1920 },
-              height: { min: 720, ideal: 1080 },
-              focusMode: 'continuous',
-              advanced: [{ focusMode: 'continuous' }],
-            },
-          } as any,
-          decoder: {
-            readers: ['ean_reader', 'ean_8_reader', 'upc_reader', 'upc_e_reader', 'code_128_reader', 'code_39_reader'],
-            multiple: false,
-          },
-          locate: true,
-          frequency: 15,
-          locator: {
-            patchSize: 'medium',
-            halfSample: false,
-          },
-        } as any)
-
-        Quagga.CameraAccess.getActiveTrack()?.applyConstraints?.({
-          advanced: [{ focusMode: 'continuous' } as any]
-        }).catch(() => {})
-        Quagga.start()
-        Quagga.onDetected((result: any) => {
-          const code = result?.codeResult?.code
-          if (!code) return
-          setForm(prev => ({ ...prev, barcode: code }))
-          if (navigator.vibrate) navigator.vibrate(50)
-          stopBarcodeScanner()
+        await (track as any).applyConstraints({
+          advanced: [{ focusMode: 'continuous' }]
         })
-      } catch (e) {
-        alert(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
-        setScanningBarcode(false)
+      } catch (e) {}
+
+      streamRef.current = stream
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play()
       }
-    }, 300)
+
+      const { BrowserMultiFormatReader } = await import('@zxing/library')
+      const reader = new BrowserMultiFormatReader()
+      readerRef.current = reader
+
+      reader.decodeFromStream(stream, videoRef.current!, (result, err) => {
+        if (!scanningRef.current) return
+        if (result) {
+          const code = result.getText()
+          setForm(prev => ({ ...prev, barcode: code }))
+          if (navigator.vibrate) navigator.vibrate(60)
+          stopScanner()
+        }
+      })
+    } catch (e) {
+      setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
+      setScanning(false)
+    }
   }
 
-  function stopBarcodeScanner() {
-    if (quaggaRef.current) {
-      try { quaggaRef.current.stop() } catch (e) {}
-      quaggaRef.current = null
+  function stopScanner() {
+    scanningRef.current = false
+    if (readerRef.current) {
+      try { readerRef.current.reset() } catch (e) {}
+      readerRef.current = null
     }
-    setScanningBarcode(false)
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+    setScanning(false)
+    setScanMsg('')
   }
 
   function getExpiryStatus(expiry?: string) {
@@ -150,11 +158,10 @@ export default function StockPage() {
     return 'ok'
   }
 
-  const filtered = products.filter(p => {
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase())
-    const matchCat = selectedCat === 'all' || p.category === selectedCat
-    return matchSearch && matchCat
-  })
+  const filtered = products.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) &&
+    (selectedCat === 'all' || p.category === selectedCat)
+  )
 
   const catCounts = CATEGORIES.reduce((acc, c) => {
     acc[c.key] = c.key === 'all' ? products.length : products.filter(p => p.category === c.key).length
@@ -163,25 +170,44 @@ export default function StockPage() {
 
   return (
     <div>
-      {scanningBarcode && (
+      {/* ZXing Scanner Modal */}
+      {scanning && (
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
-          <div ref={scannerDivRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }} />
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
             <div style={{
               width: 280, height: 140,
               border: '3px solid rgba(255,80,80,0.9)',
-              borderRadius: 12,
-              boxShadow: '0 0 0 9999px rgba(0,0,0,0.55), 0 0 20px rgba(255,80,80,0.5)'
-            }} />
-            <div style={{ marginTop: 16, color: '#fff', fontSize: 14, background: 'rgba(0,0,0,0.6)', padding: '8px 20px', borderRadius: 99 }}>
+              borderRadius: 14,
+              boxShadow: '0 0 0 9999px rgba(0,0,0,0.5), 0 0 20px rgba(255,80,80,0.3)',
+              position: 'relative',
+            }}>
+              {[
+                { top: -3, left: -3, borderTop: '4px solid', borderLeft: '4px solid', borderRadius: '4px 0 0 0' },
+                { top: -3, right: -3, borderTop: '4px solid', borderRight: '4px solid', borderRadius: '0 4px 0 0' },
+                { bottom: -3, left: -3, borderBottom: '4px solid', borderLeft: '4px solid', borderRadius: '0 0 0 4px' },
+                { bottom: -3, right: -3, borderBottom: '4px solid', borderRight: '4px solid', borderRadius: '0 0 4px 0' },
+              ].map((s, i) => (
+                <div key={i} style={{ position: 'absolute', width: 22, height: 22, borderColor: '#fff', ...s }} />
+              ))}
+              <div style={{ position: 'absolute', top: '50%', left: 6, right: 6, height: 2, background: 'rgba(255,80,80,0.75)', boxShadow: '0 0 6px rgba(255,80,80,0.6)' }} />
+            </div>
+            <div style={{ marginTop: 16, color: '#fff', fontSize: 13, background: 'rgba(0,0,0,0.65)', padding: '8px 18px', borderRadius: 99 }}>
               {lang === 'kz' ? '📷 Штрихкодты рамкаға бағыттаңыз' : '📷 Наведите штрихкод на рамку'}
             </div>
           </div>
-          <button onClick={stopBarcodeScanner} style={{
-            position: 'absolute', bottom: 40, left: '50%', transform: 'translateX(-50%)',
-            background: '#fff', border: 'none', borderRadius: 99, padding: '12px 32px',
-            fontSize: 15, fontWeight: 600, cursor: 'pointer'
-          }}>✕ {lang === 'kz' ? 'Жабу' : 'Закрыть'}</button>
+          {scanMsg && (
+            <div style={{ position: 'absolute', bottom: 130, left: 20, right: 20, background: '#D85A30', color: '#fff', borderRadius: 12, padding: '14px', textAlign: 'center', fontSize: 15 }}>
+              {scanMsg}
+            </div>
+          )}
+          <button onClick={stopScanner} style={{
+            position: 'absolute', bottom: 44, left: '50%', transform: 'translateX(-50%)',
+            background: '#fff', border: 'none', borderRadius: 99,
+            padding: '12px 40px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
+          }}>
+            {lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}
+          </button>
         </div>
       )}
 
@@ -203,7 +229,8 @@ export default function StockPage() {
             {editId ? (lang === 'kz' ? 'Өзгерту' : 'Редактировать') : (lang === 'kz' ? 'Жаңа товар' : 'Новый товар')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <input placeholder={lang === 'kz' ? 'Товар аты *' : 'Название *'} value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+            <input placeholder={lang === 'kz' ? 'Товар аты *' : 'Название *'}
+              value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
             <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
               {CATEGORIES.filter(c => c.key !== 'all').map(c => (
                 <option key={c.key} value={c.key}>{c.icon} {lang === 'kz' ? c.kz : c.ru}</option>
@@ -211,37 +238,61 @@ export default function StockPage() {
             </select>
             <div className="row-2">
               <div>
-                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>{lang === 'kz' ? 'Келген баға' : 'Цена закупки'}</label>
-                <input type="number" placeholder="0" value={form.cost_price} onChange={e => setForm({ ...form, cost_price: e.target.value })} />
+                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                  {lang === 'kz' ? 'Келген баға' : 'Цена закупки'}
+                </label>
+                <input type="number" placeholder="0" value={form.cost_price}
+                  onChange={e => setForm({ ...form, cost_price: e.target.value })} />
               </div>
               <div>
-                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>{lang === 'kz' ? 'Сату бағасы *' : 'Цена продажи *'}</label>
-                <input type="number" placeholder="0" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} />
+                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                  {lang === 'kz' ? 'Сату бағасы *' : 'Цена продажи *'}
+                </label>
+                <input type="number" placeholder="0" value={form.price}
+                  onChange={e => setForm({ ...form, price: e.target.value })} />
               </div>
             </div>
             <div className="row-2">
               <div>
-                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>{lang === 'kz' ? 'Саны' : 'Количество'}</label>
-                <input type="number" step={form.unit === 'кг' ? '0.001' : '1'} placeholder="0" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} />
+                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                  {lang === 'kz' ? 'Саны' : 'Количество'}
+                </label>
+                <input type="number" step={form.unit === 'кг' ? '0.001' : '1'}
+                  placeholder="0" value={form.quantity}
+                  onChange={e => setForm({ ...form, quantity: e.target.value })} />
               </div>
               <div>
-                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>{lang === 'kz' ? 'Өлшем' : 'Единица'}</label>
+                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                  {lang === 'kz' ? 'Өлшем' : 'Единица'}
+                </label>
                 <select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}>
                   {UNITS.map(u => <option key={u} value={u}>{u}</option>)}
                 </select>
               </div>
             </div>
             <div>
-              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>{lang === 'kz' ? 'Жарамдылық мерзімі (міндетті емес)' : 'Срок годности (необязательно)'}</label>
-              <input type="date" value={form.expiry_date} onChange={e => setForm({ ...form, expiry_date: e.target.value })} />
+              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                {lang === 'kz' ? 'Жарамдылық мерзімі (міндетті емес)' : 'Срок годности (необязательно)'}
+              </label>
+              <input type="date" value={form.expiry_date}
+                onChange={e => setForm({ ...form, expiry_date: e.target.value })} />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>{lang === 'kz' ? 'Штрихкод (міндетті емес)' : 'Штрихкод (необязательно)'}</label>
+              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                {lang === 'kz' ? 'Штрихкод (міндетті емес)' : 'Штрихкод (необязательно)'}
+              </label>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input placeholder="1234567890123" value={form.barcode} onChange={e => setForm({ ...form, barcode: e.target.value })} style={{ flex: 1 }} />
-                <button type="button" onClick={startBarcodeScanner} style={{ padding: '0 14px', borderRadius: 8, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 20, flexShrink: 0 }}>📷</button>
+                <input placeholder="1234567890123" value={form.barcode}
+                  onChange={e => setForm({ ...form, barcode: e.target.value })}
+                  style={{ flex: 1 }} />
+                <button type="button" onClick={startScanner} style={{
+                  padding: '0 14px', borderRadius: 8, border: '1px solid #e5e7eb',
+                  background: '#fff', cursor: 'pointer', fontSize: 20, flexShrink: 0
+                }}>📷</button>
               </div>
-              {form.barcode && <div style={{ fontSize: 11, color: '#0F6E56', marginTop: 4 }}>✓ {form.barcode}</div>}
+              {form.barcode && (
+                <div style={{ fontSize: 11, color: '#0F6E56', marginTop: 4 }}>✓ {form.barcode}</div>
+              )}
             </div>
             <div className="row-2">
               <button className="btn btn-primary" onClick={saveProduct} disabled={loading}>
