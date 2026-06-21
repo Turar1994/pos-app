@@ -7,18 +7,20 @@
 :root {
   --blue: #185FA5;
   --blue-light: #E6F1FB;
-  --green: #0F6E56;
-  --green-light: #E1F5EE;
+  --green: #2d8a5e;
+  --green-light: #e6f4ec;
   --red: #D85A30;
   --red-light: #FAECE7;
-  --gray: #f5f5f5;
-  --border: #e5e7eb;
-  --text: #111;
-  --muted: #6b7280;
-  --bg: #f9fafb;
+  --gray: #f0ece4;
+  --border: #e0d8cc;
+  --text: #1a1208;
+  --muted: #7a6e5f;
+  --bg: #faf7f2;
   --white: #fff;
-  --radius: 10px;
-  --radius-sm: 6px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --accent: #2d8a5e;
+  --accent-light: #e6f4ec;
 }
 
 body {
@@ -64,9 +66,9 @@ input:focus, select:focus {
 .btn:active { opacity: 0.8; }
 
 .btn-primary {
-  background: var(--blue);
+  background: var(--accent);
   color: var(--white);
-  border-color: var(--blue);
+  border-color: var(--accent);
 }
 
 .btn-success {

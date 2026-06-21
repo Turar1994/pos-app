@@ -7,7 +7,6 @@ import { t } from '@/lib/lang'
 type Product = { id: string; name: string; price: number; cost_price?: number; quantity: number; expiry_date?: string; category?: string; unit?: string; barcode?: string }
 
 const CATEGORIES = [
-  { key: 'all', kz: 'Барлығы', ru: 'Все', icon: '📋' },
   { key: 'drinks', kz: 'Сусындар', ru: 'Напитки', icon: '🥤' },
   { key: 'bread', kz: 'Нан өнімдері', ru: 'Хлеб', icon: '🍞' },
   { key: 'dairy', kz: 'Сүт өнімдері', ru: 'Молочные', icon: '🥛' },
@@ -27,7 +26,7 @@ export default function StockPage() {
   const T = t[lang]
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState('')
-  const [selectedCat, setSelectedCat] = useState('all')
+  const [selectedCat, setSelectedCat] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
   const [loading, setLoading] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
@@ -75,7 +74,15 @@ export default function StockPage() {
 
   async function deleteProduct(id: string) {
     if (!confirm(lang === 'kz' ? 'Жоюға сенімдісіз бе?' : 'Вы уверены?')) return
-    await createClient().from('products').delete().eq('id', id)
+    const supabase = createClient()
+    // Алдымен sales/debts кестелеріндегі product_id сілтемелерін тазалап, FK constraint-тен өтеміз
+    await supabase.from('sales').update({ product_id: null }).eq('product_id', id)
+    await supabase.from('debts').update({ product_id: null }).eq('product_id', id)
+    const { error } = await supabase.from('products').delete().eq('id', id)
+    if (error) {
+      alert(lang === 'kz' ? '❌ Жою мүмкін болмады: ' + error.message : '❌ Не удалось удалить: ' + error.message)
+      return
+    }
     loadProducts()
   }
 
@@ -160,13 +167,16 @@ export default function StockPage() {
 
   const filtered = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) &&
-    (selectedCat === 'all' || p.category === selectedCat)
+    (selectedCat === null || p.category === selectedCat)
   )
 
   const catCounts = CATEGORIES.reduce((acc, c) => {
-    acc[c.key] = c.key === 'all' ? products.length : products.filter(p => p.category === c.key).length
+    acc[c.key] = products.filter(p => p.category === c.key).length
     return acc
   }, {} as Record<string, number>)
+
+  const availableCats = CATEGORIES.filter(c => catCounts[c.key] > 0)
+  const showCategoryGrid = !search && selectedCat === null && !showAdd
 
   return (
     <div>
@@ -306,51 +316,73 @@ export default function StockPage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6, marginBottom: 10 }}>
-        {CATEGORIES.filter(c => c.key === 'all' || catCounts[c.key] > 0).map(c => (
-          <button key={c.key} onClick={() => setSelectedCat(c.key)} style={{
-            padding: '6px 12px', borderRadius: 99, border: '1px solid #e5e7eb',
-            background: selectedCat === c.key ? '#185FA5' : '#fff',
-            color: selectedCat === c.key ? '#fff' : '#6b7280',
-            cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0
-          }}>
-            {c.icon} {lang === 'kz' ? c.kz : c.ru} ({catCounts[c.key]})
-          </button>
-        ))}
-      </div>
-
-      <div className="card" style={{ padding: 0 }}>
-        {filtered.length === 0
-          ? <p className="text-muted" style={{ textAlign: 'center', padding: 20, fontSize: 13 }}>{T.noProducts}</p>
-          : filtered.map(p => {
-            const expStatus = getExpiryStatus(p.expiry_date)
-            return (
-              <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid #f3f4f6' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</div>
-                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
-                    {p.price.toLocaleString()} ₸/{p.unit || 'шт'}
-                    {p.barcode && <span style={{ marginLeft: 6, color: '#9ca3af' }}>#{p.barcode}</span>}
-                    {expStatus === 'expired' && <span style={{ color: '#D85A30', marginLeft: 6 }}>❌ мерзімі өтті</span>}
-                    {expStatus === 'soon' && <span style={{ color: '#D97706', marginLeft: 6 }}>⚠️ {p.expiry_date}</span>}
+      {showCategoryGrid ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+          {availableCats.map(c => (
+            <button key={c.key} onClick={() => setSelectedCat(c.key)} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: '18px 8px', border: '2px solid var(--border)', borderRadius: 16,
+              background: '#fff', cursor: 'pointer', gap: 8,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.05)'
+            }}>
+              <span style={{ fontSize: 40 }}>{c.icon}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3 }}>
+                {lang === 'kz' ? c.kz : c.ru}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 500 }}>
+                {catCounts[c.key]} {lang === 'kz' ? 'дана' : 'шт'}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <>
+          {selectedCat !== null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <button onClick={() => setSelectedCat(null)} style={{
+                padding: '6px 14px', borderRadius: 99, border: '1px solid var(--border)',
+                background: '#fff', cursor: 'pointer', fontSize: 13, color: 'var(--muted)'
+              }}>← {lang === 'kz' ? 'Артқа' : 'Назад'}</button>
+              <span style={{ fontSize: 20 }}>{CATEGORIES.find(c => c.key === selectedCat)?.icon}</span>
+              <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text)' }}>
+                {lang === 'kz' ? CATEGORIES.find(c => c.key === selectedCat)?.kz : CATEGORIES.find(c => c.key === selectedCat)?.ru}
+              </span>
+            </div>
+          )}
+          <div className="card" style={{ padding: 0 }}>
+            {filtered.length === 0
+              ? <p className="text-muted" style={{ textAlign: 'center', padding: 20, fontSize: 13 }}>{T.noProducts}</p>
+              : filtered.map(p => {
+                const expStatus = getExpiryStatus(p.expiry_date)
+                return (
+                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid #f3f4f6' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</div>
+                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                        {p.price.toLocaleString()} ₸/{p.unit || 'шт'}
+                        {p.barcode && <span style={{ marginLeft: 6, color: '#9ca3af' }}>#{p.barcode}</span>}
+                        {expStatus === 'expired' && <span style={{ color: '#D85A30', marginLeft: 6 }}>❌ мерзімі өтті</span>}
+                        {expStatus === 'soon' && <span style={{ color: '#D97706', marginLeft: 6 }}>⚠️ {p.expiry_date}</span>}
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <span style={{
+                        fontSize: 13, fontWeight: 600, padding: '3px 8px', borderRadius: 99,
+                        background: p.quantity <= 5 ? '#FAECE7' : '#E1F5EE',
+                        color: p.quantity <= 5 ? '#712B13' : '#085041'
+                      }}>
+                        {p.quantity} {p.unit || 'шт'}
+                      </span>
+                      <span onClick={() => startEdit(p)} style={{ cursor: 'pointer', fontSize: 15 }}>✏️</span>
+                      <span onClick={() => deleteProduct(p.id)} style={{ cursor: 'pointer', fontSize: 15 }}>🗑</span>
+                    </div>
                   </div>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <span style={{
-                    fontSize: 13, fontWeight: 600, padding: '3px 8px', borderRadius: 99,
-                    background: p.quantity <= 5 ? '#FAECE7' : '#E1F5EE',
-                    color: p.quantity <= 5 ? '#712B13' : '#085041'
-                  }}>
-                    {p.quantity} {p.unit || 'шт'}
-                  </span>
-                  <span onClick={() => startEdit(p)} style={{ cursor: 'pointer', fontSize: 15 }}>✏️</span>
-                  <span onClick={() => deleteProduct(p.id)} style={{ cursor: 'pointer', fontSize: 15 }}>🗑</span>
-                </div>
-              </div>
-            )
-          })
-        }
-      </div>
+                )
+              })
+            }
+          </div>
+        </>
+      )}
     </div>
   )
 }

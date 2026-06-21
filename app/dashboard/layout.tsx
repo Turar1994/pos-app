@@ -137,23 +137,25 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <AppContext.Provider value={{ store, lang, setLang, refresh, triggerRefresh: () => setRefresh(r => r + 1) }}>
       <div style={{ paddingBottom: 70 }}>
         <div style={{
-          background: '#fff', borderBottom: '1px solid #e5e7eb',
-          padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+          background: '#fff', borderBottom: '1px solid var(--border)',
+          padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.06)'
         }}>
-          <span style={{ fontWeight: 600, fontSize: 15 }}>{store.name}</span>
+          <span style={{ fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>🛒 {store.name}</span>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <div style={{ display: 'flex', gap: 4 }}>
               {(['kz', 'ru'] as Lang[]).map(l => (
                 <button key={l} onClick={() => setLang(l)} style={{
-                  padding: '3px 8px', borderRadius: 99, border: '1px solid #e5e7eb',
-                  background: lang === l ? '#f3f4f6' : 'transparent',
-                  fontWeight: lang === l ? 600 : 400, cursor: 'pointer', fontSize: 11
+                  padding: '5px 10px', borderRadius: 99, border: '1px solid var(--border)',
+                  background: lang === l ? 'var(--accent)' : 'transparent',
+                  color: lang === l ? '#fff' : 'var(--muted)',
+                  fontWeight: lang === l ? 600 : 400, cursor: 'pointer', fontSize: 12
                 }}>{l === 'kz' ? 'ҚАЗ' : 'РУС'}</button>
               ))}
             </div>
             <button onClick={logout} style={{
-              fontSize: 11, padding: '3px 8px', borderRadius: 99,
-              border: '1px solid #e5e7eb', background: 'transparent', cursor: 'pointer', color: '#D85A30'
+              fontSize: 12, padding: '5px 10px', borderRadius: 99,
+              border: '1px solid #e5c5b5', background: 'transparent', cursor: 'pointer', color: '#D85A30'
             }}>{T.logout}</button>
           </div>
         </div>
@@ -163,18 +165,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         <nav style={{
           position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
           width: '100%', maxWidth: 430, background: '#fff',
-          borderTop: '1px solid #e5e7eb', display: 'flex'
+          borderTop: '2px solid var(--border)', display: 'flex',
+          boxShadow: '0 -2px 10px rgba(0,0,0,0.07)'
         }}>
           {tabs.map(tab => {
             const active = pathname === tab.path
             return (
               <button key={tab.path} onClick={() => router.push(tab.path)} style={{
-                flex: 1, padding: '8px 2px', border: 'none', background: 'transparent',
-                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-                borderTop: active ? '2px solid #185FA5' : '2px solid transparent',
-                color: active ? '#185FA5' : '#6b7280', fontSize: 9, fontWeight: active ? 600 : 400
+                flex: 1, padding: '10px 2px 8px', border: 'none', background: 'transparent',
+                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+                borderTop: active ? '3px solid var(--accent)' : '3px solid transparent',
+                color: active ? 'var(--accent)' : 'var(--muted)',
+                fontSize: 10, fontWeight: active ? 700 : 400,
+                transition: 'color 0.15s'
               }}>
-                <span style={{ fontSize: 17 }}>{tab.icon}</span>
+                <span style={{ fontSize: 22 }}>{tab.icon}</span>
                 {tab.label}
               </button>
             )

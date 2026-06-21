@@ -8,7 +8,6 @@ type Product = { id: string; name: string; price: number; quantity: number; unit
 type CartItem = { product: Product; qty: number; amount: number }
 
 const CATEGORIES = [
-  { key: 'all', kz: 'Барлығы', ru: 'Все', icon: '📋' },
   { key: 'drinks', kz: 'Сусындар', ru: 'Напитки', icon: '🥤' },
   { key: 'bread', kz: 'Нан', ru: 'Хлеб', icon: '🍞' },
   { key: 'dairy', kz: 'Сүт', ru: 'Молочные', icon: '🥛' },
@@ -27,7 +26,7 @@ export default function SalePage() {
   const [products, setProducts] = useState<Product[]>([])
   const [cart, setCart] = useState<CartItem[]>([])
   const [search, setSearch] = useState('')
-  const [selectedCat, setSelectedCat] = useState('all')
+  const [selectedCat, setSelectedCat] = useState<string | null>(null)
   const [payType, setPayType] = useState<'cash' | 'kaspi'>('cash')
   const [loading, setLoading] = useState(false)
   const [success, setSuccess] = useState('')
@@ -301,9 +300,10 @@ export default function SalePage() {
 
   const filtered = products.filter(p =>
     p.name.toLowerCase().includes(search.toLowerCase()) &&
-    (selectedCat === 'all' || p.category === selectedCat)
+    (selectedCat === null || p.category === selectedCat)
   )
-  const availableCats = CATEGORIES.filter(c => c.key === 'all' || products.some(p => p.category === c.key))
+  const availableCats = CATEGORIES.filter(c => products.some(p => p.category === c.key))
+  const showCategoryGrid = !search && selectedCat === null
   const hintText = hint >= 1
     ? (lang === 'kz' ? '💡 Жарықты қосыңыз немесе жақынырақ апарыңыз' : '💡 Включите фонарик или поднесите ближе')
     : (lang === 'kz' ? '📷 Штрихкодты рамкаға бағыттаңыз' : '📷 Наведите штрихкод на рамку')
@@ -398,40 +398,71 @@ export default function SalePage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
         <input placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
           value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
         <button onClick={startScanner} style={{
-          padding: '0 14px', borderRadius: 8, border: '1px solid #e5e7eb',
-          background: '#fff', cursor: 'pointer', fontSize: 20, flexShrink: 0
+          padding: '0 14px', borderRadius: 8, border: '1px solid var(--border)',
+          background: '#fff', cursor: 'pointer', fontSize: 22, flexShrink: 0
         }}>📷</button>
       </div>
 
-      <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6, marginBottom: 10 }}>
-        {availableCats.map(c => (
-          <button key={c.key} onClick={() => setSelectedCat(c.key)} style={{
-            padding: '5px 10px', borderRadius: 99, border: '1px solid #e5e7eb',
-            background: selectedCat === c.key ? '#185FA5' : '#fff',
-            color: selectedCat === c.key ? '#fff' : '#6b7280',
-            cursor: 'pointer', fontSize: 12, whiteSpace: 'nowrap', flexShrink: 0
-          }}>{c.icon} {lang === 'kz' ? c.kz : c.ru}</button>
-        ))}
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-        {filtered.map(p => (
-          <div key={p.id} onClick={() => addToCart(p)} style={{
-            background: '#fff', border: '1px solid #e5e7eb', borderRadius: 10,
-            padding: '10px 12px', cursor: 'pointer', userSelect: 'none'
-          }}>
-            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>{p.name}</div>
-            <div style={{ fontSize: 12, color: '#6b7280' }}>{p.price.toLocaleString()} ₸/{p.unit || 'шт'}</div>
-            <div style={{ fontSize: 11, color: p.quantity <= 5 ? '#D85A30' : '#0F6E56', marginTop: 2 }}>
-              {p.quantity} {p.unit || 'шт'}
+      {showCategoryGrid ? (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+          {availableCats.map(c => (
+            <button key={c.key} onClick={() => setSelectedCat(c.key)} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: '18px 8px', border: '2px solid var(--border)', borderRadius: 16,
+              background: '#fff', cursor: 'pointer', gap: 8,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.05)', transition: 'all 0.15s'
+            }}>
+              <span style={{ fontSize: 40 }}>{c.icon}</span>
+              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3 }}>
+                {lang === 'kz' ? c.kz : c.ru}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 500 }}>
+                {products.filter(p => p.category === c.key).length} {lang === 'kz' ? 'дана' : 'шт'}
+              </span>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <>
+          {selectedCat !== null && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <button onClick={() => setSelectedCat(null)} style={{
+                padding: '6px 14px', borderRadius: 99, border: '1px solid var(--border)',
+                background: '#fff', cursor: 'pointer', fontSize: 13, color: 'var(--muted)'
+              }}>← {lang === 'kz' ? 'Артқа' : 'Назад'}</button>
+              <span style={{ fontSize: 20 }}>{CATEGORIES.find(c => c.key === selectedCat)?.icon}</span>
+              <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text)' }}>
+                {lang === 'kz' ? CATEGORIES.find(c => c.key === selectedCat)?.kz : CATEGORIES.find(c => c.key === selectedCat)?.ru}
+              </span>
             </div>
+          )}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+            {filtered.map(p => (
+              <div key={p.id} onClick={() => addToCart(p)} style={{
+                background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
+                padding: '12px', cursor: 'pointer', userSelect: 'none',
+                boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
+              }}>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 5 }}>{p.name}</div>
+                <div style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>{p.price.toLocaleString()} ₸</div>
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>/{p.unit || 'шт'}</div>
+                <div style={{ fontSize: 11, color: p.quantity <= 5 ? '#D85A30' : 'var(--muted)', marginTop: 4 }}>
+                  {lang === 'kz' ? 'Қалдық:' : 'Остаток:'} {p.quantity} {p.unit || 'шт'}
+                </div>
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 24, color: 'var(--muted)', fontSize: 14 }}>
+                {lang === 'kz' ? 'Товар табылмады' : 'Товары не найдены'}
+              </div>
+            )}
           </div>
-        ))}
-      </div>
+        </>
+      )}
 
       {cart.length > 0 && (
         <div className="card">
