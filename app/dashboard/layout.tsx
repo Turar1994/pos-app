@@ -16,12 +16,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [storeName, setStoreName] = useState('')
   const [refresh, setRefresh] = useState(0)
   const T = t[lang]
-
   const [blocked, setBlocked] = useState<string | null>(null)
 
   useEffect(() => { loadStore() }, [])
-
-  // Әр 60 секунд сайын статусты тексеру
   useEffect(() => {
     const interval = setInterval(checkStatus, 60000)
     return () => clearInterval(interval)
@@ -36,16 +33,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .eq('email', session.user.email!)
       .maybeSingle()
     if (!client || client.deleted_at) {
-      await supabase.auth.signOut()
-      router.replace('/auth')
-      return
+      await supabase.auth.signOut(); router.replace('/auth'); return
     }
     if (client.status === 'blocked') {
       setBlocked(lang === 'kz' ? 'Аккаунтыңыз блокталған. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт заблокирован. Свяжитесь: turar.toreniyazov@gmail.com')
       return
     }
     if (client.status === 'inactive') {
-      setBlocked(lang === 'kz' ? 'Аккаунтыңыз белсендірілмеген. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт деактивирован. Свяжитесь: turar.toreniyazov@gmail.com')
+      setBlocked(lang === 'kz' ? 'Аккаунтыңыз белсендірілмеген.' : 'Аккаунт деактивирован.')
       return
     }
     if (client.subscription_end && new Date(client.subscription_end) < new Date()) {
@@ -84,30 +79,38 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }
 
   if (loading) return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-      <p className="text-muted">{T.loading}</p>
+    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100vh', gap: 12 }}>
+      <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>🛒</div>
+      <div style={{ display: 'flex', gap: 6 }}>
+        {[0,1,2].map(i => (
+          <div key={i} style={{
+            width: 6, height: 6, borderRadius: '50%', background: 'var(--primary)',
+            animation: `dotPulse 1.2s ease-in-out ${i * 0.2}s infinite`,
+            opacity: 0.4
+          }} />
+        ))}
+      </div>
+      <style>{`@keyframes dotPulse { 0%,80%,100%{transform:scale(0.6);opacity:0.3} 40%{transform:scale(1);opacity:1} }`}</style>
     </div>
   )
 
   if (blocked) return (
     <div style={{
       position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-      background: 'rgba(0,0,0,0.85)', zIndex: 9999,
+      background: 'rgba(15,23,42,0.92)', zIndex: 9999,
       display: 'flex', flexDirection: 'column',
       justifyContent: 'center', alignItems: 'center',
       padding: 24, textAlign: 'center'
     }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
-      <h2 style={{ color: '#fff', fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
+      <div style={{ fontSize: 52, marginBottom: 20 }}>🔒</div>
+      <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 700, marginBottom: 12 }}>
         {lang === 'kz' ? 'Қатынас жабық' : 'Доступ закрыт'}
       </h2>
-      <p style={{ color: '#e5e7eb', fontSize: 14, maxWidth: 300, lineHeight: 1.6 }}>
-        {blocked}
-      </p>
+      <p style={{ color: '#94A3B8', fontSize: 14, maxWidth: 300, lineHeight: 1.7 }}>{blocked}</p>
       <button onClick={logout} style={{
-        marginTop: 24, padding: '10px 24px',
-        background: '#D85A30', color: '#fff',
-        border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 14
+        marginTop: 28, padding: '12px 28px',
+        background: '#EF4444', color: '#fff',
+        border: 'none', borderRadius: 12, cursor: 'pointer', fontSize: 15, fontWeight: 600
       }}>
         {lang === 'kz' ? 'Шығу' : 'Выйти'}
       </button>
@@ -115,71 +118,117 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   )
 
   if (!store) return (
-    <div style={{ padding: '40px 20px' }}>
-      <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 24 }}>{T.createStoreTitle}</h1>
+    <div style={{ padding: '48px 20px' }}>
+      <div style={{ marginBottom: 32, textAlign: 'center' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>🏪</div>
+        <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 6 }}>{T.createStoreTitle}</h1>
+        <p style={{ fontSize: 14, color: 'var(--muted)' }}>{lang === 'kz' ? 'Дүкеніңіздің атын енгізіңіз' : 'Введите название магазина'}</p>
+      </div>
       <div className="gap">
-        <input placeholder={T.storeName} value={storeName} onChange={e => setStoreName(e.target.value)} />
+        <input placeholder={T.storeName} value={storeName} onChange={e => setStoreName(e.target.value)} style={{ fontSize: 16 }} />
         <button className="btn btn-primary" onClick={createStore}>{T.createStore}</button>
       </div>
     </div>
   )
 
   const tabs = [
-    { path: '/dashboard', label: T.home, icon: '🏠' },
-    { path: '/dashboard/sale', label: T.sale, icon: '💰' },
-    { path: '/dashboard/stock', label: T.stock, icon: '📦' },
-    { path: '/dashboard/report', label: T.report, icon: '📊' },
-    { path: '/dashboard/debts', label: lang === 'kz' ? 'Қарыз' : 'Долги', icon: '💳' },
-    { path: '/dashboard/profile', label: lang === 'kz' ? 'Кабинет' : 'Кабинет', icon: '👤' },
+    { path: '/dashboard',         label: T.home,                                    icon: '🏠' },
+    { path: '/dashboard/sale',    label: T.sale,                                    icon: '💰' },
+    { path: '/dashboard/stock',   label: T.stock,                                   icon: '📦' },
+    { path: '/dashboard/report',  label: T.report,                                  icon: '📊' },
+    { path: '/dashboard/debts',   label: lang === 'kz' ? 'Қарыз' : 'Долги',        icon: '💳' },
+    { path: '/dashboard/profile', label: lang === 'kz' ? 'Кабинет' : 'Кабинет',   icon: '👤' },
   ]
 
   return (
     <AppContext.Provider value={{ store, lang, setLang, refresh, triggerRefresh: () => setRefresh(r => r + 1) }}>
-      <div style={{ paddingBottom: 70 }}>
+      <div style={{ paddingBottom: 74 }}>
+        {/* Header */}
         <div style={{
-          background: '#fff', borderBottom: '1px solid var(--border)',
-          padding: '14px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          boxShadow: '0 1px 4px rgba(0,0,0,0.06)'
+          background: '#fff',
+          borderBottom: '1px solid var(--border)',
+          padding: '12px 16px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          boxShadow: '0 1px 8px rgba(15,23,42,0.05)',
+          position: 'sticky', top: 0, zIndex: 50
         }}>
-          <span style={{ fontWeight: 700, fontSize: 17, color: 'var(--accent)' }}>🛒 {store.name}</span>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{
+              width: 34, height: 34, borderRadius: 10,
+              background: 'var(--primary)', display: 'flex',
+              alignItems: 'center', justifyContent: 'center', fontSize: 16
+            }}>🛒</div>
+            <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)', letterSpacing: -0.3 }}>
+              {store.name}
+            </span>
+          </div>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <div style={{
+              display: 'flex', gap: 2, padding: '3px',
+              background: 'var(--surface)', borderRadius: 10
+            }}>
               {(['kz', 'ru'] as Lang[]).map(l => (
                 <button key={l} onClick={() => setLang(l)} style={{
-                  padding: '5px 10px', borderRadius: 99, border: '1px solid var(--border)',
-                  background: lang === l ? 'var(--accent)' : 'transparent',
-                  color: lang === l ? '#fff' : 'var(--muted)',
-                  fontWeight: lang === l ? 600 : 400, cursor: 'pointer', fontSize: 12
+                  padding: '5px 10px', borderRadius: 8, border: 'none',
+                  background: lang === l ? '#fff' : 'transparent',
+                  color: lang === l ? 'var(--text)' : 'var(--muted)',
+                  fontWeight: lang === l ? 700 : 500,
+                  cursor: 'pointer', fontSize: 12,
+                  boxShadow: lang === l ? '0 1px 4px rgba(0,0,0,0.10)' : 'none',
+                  transition: 'all 0.15s'
                 }}>{l === 'kz' ? 'ҚАЗ' : 'РУС'}</button>
               ))}
             </div>
             <button onClick={logout} style={{
-              fontSize: 12, padding: '5px 10px', borderRadius: 99,
-              border: '1px solid #e5c5b5', background: 'transparent', cursor: 'pointer', color: '#D85A30'
+              fontSize: 12, padding: '6px 12px', borderRadius: 8,
+              border: '1px solid var(--border)', background: 'transparent',
+              cursor: 'pointer', color: 'var(--muted)', fontWeight: 500
             }}>{T.logout}</button>
           </div>
         </div>
 
-        <div style={{ padding: '12px' }}>{children}</div>
+        {/* Content — key triggers slide-in on every tab change */}
+        <div key={pathname} style={{ padding: '14px 14px 0' }} className="anim-page-in">
+          {children}
+        </div>
 
+        {/* Bottom Nav */}
         <nav style={{
           position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
           width: '100%', maxWidth: 430, background: '#fff',
-          borderTop: '2px solid var(--border)', display: 'flex',
-          boxShadow: '0 -2px 10px rgba(0,0,0,0.07)'
+          borderTop: '1px solid var(--border)', display: 'flex',
+          boxShadow: '0 -4px 20px rgba(15,23,42,0.08)'
         }}>
           {tabs.map(tab => {
             const active = pathname === tab.path
             return (
               <button key={tab.path} onClick={() => router.push(tab.path)} style={{
-                flex: 1, padding: '10px 2px 8px', border: 'none', background: 'transparent',
-                cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
-                borderTop: active ? '3px solid var(--accent)' : '3px solid transparent',
-                color: active ? 'var(--accent)' : 'var(--muted)',
-                fontSize: 10, fontWeight: active ? 700 : 400,
-                transition: 'color 0.15s'
+                flex: 1, padding: '10px 4px 8px', border: 'none',
+                background: 'transparent',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+                color: active ? 'var(--primary)' : 'var(--muted)',
+                fontSize: 10, fontWeight: active ? 700 : 500,
+                cursor: 'pointer',
+                position: 'relative',
+                transition: 'color 0.15s',
+                WebkitTapHighlightColor: 'transparent',
               }}>
-                <span style={{ fontSize: 22 }}>{tab.icon}</span>
+                {active && (
+                  <div style={{
+                    position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)',
+                    width: 24, height: 3, borderRadius: '0 0 3px 3px',
+                    background: 'var(--primary)',
+                  }} />
+                )}
+                <span style={{
+                  fontSize: 22,
+                  filter: active ? 'none' : 'grayscale(0.3) opacity(0.7)',
+                  transition: 'transform 0.15s cubic-bezier(0.34,1.56,0.64,1), filter 0.15s',
+                  transform: active ? 'scale(1.12)' : 'scale(1)',
+                  display: 'block',
+                }}>{tab.icon}</span>
                 {tab.label}
               </button>
             )

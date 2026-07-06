@@ -5,154 +5,640 @@
 }
 
 :root {
-  --blue: #185FA5;
-  --blue-light: #E6F1FB;
-  --green: #2d8a5e;
-  --green-light: #e6f4ec;
-  --red: #D85A30;
-  --red-light: #FAECE7;
-  --gray: #f0ece4;
-  --border: #e0d8cc;
-  --text: #1a1208;
-  --muted: #7a6e5f;
-  --bg: #faf7f2;
-  --white: #fff;
-  --radius: 12px;
-  --radius-sm: 8px;
-  --accent: #2d8a5e;
-  --accent-light: #e6f4ec;
+  --primary: #16A34A;
+  --primary-light: #DCFCE7;
+  --primary-dark: #15803D;
+  --success: #22C55E;
+  --warning: #F59E0B;
+  --warning-light: #FEF9C3;
+  --danger: #EF4444;
+  --danger-light: #FEE2E2;
+
+  --bg: #F8FAFC;
+  --card-bg: #FFFFFF;
+  --surface: #F1F5F9;
+
+  --text: #0F172A;
+  --text-secondary: #475569;
+  --muted: #94A3B8;
+
+  --border: #E2E8F0;
+
+  --shadow-sm: 0 1px 3px rgba(15,23,42,0.05), 0 1px 2px rgba(15,23,42,0.03);
+  --shadow: 0 4px 16px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04);
+  --shadow-lg: 0 12px 32px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.05);
+
+  --radius: 20px;
+  --radius-sm: 14px;
+  --radius-xs: 10px;
+
+  /* Legacy compatibility */
+  --green: #16A34A;
+  --green-light: #DCFCE7;
+  --accent: #16A34A;
+  --accent-light: #DCFCE7;
+  --blue: #3B82F6;
+  --blue-light: #DBEAFE;
+  --red: #EF4444;
+  --red-light: #FEE2E2;
+  --gray: #F1F5F9;
+  --white: #FFFFFF;
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
   background: var(--bg);
   color: var(--text);
   max-width: 430px;
   margin: 0 auto;
   min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 input, select, button {
   font-family: inherit;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 input, select {
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
+  padding: 13px 16px;
+  border: 1.5px solid var(--border);
   border-radius: var(--radius-sm);
-  background: var(--white);
+  background: var(--card-bg);
   color: var(--text);
   outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  font-size: 15px;
 }
 
 input:focus, select:focus {
-  border-color: var(--blue);
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.10);
 }
+
+input::placeholder {
+  color: var(--muted);
+}
+
+/* ===================== BUTTONS ===================== */
 
 .btn {
   width: 100%;
-  padding: 11px;
+  padding: 14px 18px;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--white);
+  border: 1.5px solid var(--border);
+  background: var(--card-bg);
   cursor: pointer;
   font-size: 15px;
-  font-weight: 500;
-  transition: opacity 0.15s;
+  font-weight: 600;
+  color: var(--text-secondary);
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 0.12s ease-out,
+              opacity 0.12s;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.btn:active { opacity: 0.8; }
+.btn:active {
+  transform: scale(0.97) !important;
+  opacity: 0.88;
+}
 
 .btn-primary {
-  background: var(--accent);
-  color: var(--white);
-  border-color: var(--accent);
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 2px 10px rgba(22, 163, 74, 0.28);
+}
+
+.btn-primary:active {
+  box-shadow: 0 1px 4px rgba(22, 163, 74, 0.18) !important;
 }
 
 .btn-success {
-  background: var(--green);
-  color: var(--white);
-  border-color: var(--green);
+  background: var(--primary);
+  color: #fff;
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(22, 163, 74, 0.22);
 }
 
+.btn-sm {
+  padding: 8px 14px;
+  font-size: 13px;
+  width: auto;
+  border-radius: var(--radius-xs);
+}
+
+.btn-danger {
+  background: var(--danger-light);
+  color: #B91C1C;
+  border-color: transparent;
+}
+
+/* ===================== CARDS ===================== */
+
 .card {
-  background: var(--white);
+  background: var(--card-bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 14px;
-  margin-bottom: 10px;
+  padding: 18px;
+  margin-bottom: 12px;
+  box-shadow: var(--shadow-sm);
 }
+
+/* ===================== STATS ===================== */
 
 .stat-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 .stat-card {
-  background: var(--gray);
+  background: var(--card-bg);
   border-radius: var(--radius-sm);
-  padding: 12px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
 }
 
 .stat-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .stat-value {
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text);
 }
 
 .section-title {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: 10px;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
 }
+
+/* ===================== ROWS & LAYOUT ===================== */
 
 .row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 9px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--border);
 }
 
 .row:last-child { border: none; }
 
+.gap { display: flex; flex-direction: column; gap: 10px; }
+.gap-sm { display: flex; flex-direction: column; gap: 6px; }
+.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ===================== BADGES ===================== */
+
 .badge {
   font-size: 11px;
-  padding: 2px 8px;
+  padding: 3px 9px;
   border-radius: 99px;
+  font-weight: 600;
 }
 
-.badge-cash { background: var(--green-light); color: #085041; }
-.badge-kaspi { background: var(--blue-light); color: #0C447C; }
-.badge-low { background: var(--red-light); color: #712B13; }
+.badge-cash   { background: var(--primary-light); color: #15803D; }
+.badge-kaspi  { background: var(--blue-light); color: #1D4ED8; }
+.badge-low    { background: var(--danger-light); color: #B91C1C; }
+.badge-active { background: var(--primary-light); color: #15803D; }
+
+/* ===================== ALERTS ===================== */
 
 .alert {
-  background: var(--red-light);
-  border: 1px solid #F0997B;
+  background: #FFF7ED;
+  border: 1px solid #FED7AA;
   border-radius: var(--radius-sm);
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  padding: 12px 16px;
+  margin-bottom: 12px;
   font-size: 13px;
-  color: #712B13;
+  color: #92400E;
+  line-height: 1.5;
 }
 
-.text-red { color: var(--red); }
-.text-green { color: var(--green); }
-.text-blue { color: var(--blue); }
-.text-muted { color: var(--muted); font-size: 13px; }
+/* ===================== TEXT HELPERS ===================== */
 
-.gap { display: flex; flex-direction: column; gap: 8px; }
-.gap-sm { display: flex; flex-direction: column; gap: 6px; }
-.row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.text-red    { color: var(--danger); }
+.text-green  { color: var(--primary); }
+.text-blue   { color: var(--blue); }
+.text-muted  { color: var(--muted); font-size: 13px; }
+
+/* ===================== SKELETON LOADING ===================== */
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite linear;
+  border-radius: var(--radius-xs);
+}
+
+.skeleton-text {
+  height: 14px;
+  margin-bottom: 8px;
+}
+
+.skeleton-value {
+  height: 26px;
+  width: 60%;
+}
+
+/* ===================== HERO WAVE ===================== */
+
+@keyframes waveShift {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.hero-wave {
+  background: linear-gradient(-45deg, #15803D, #16A34A, #22C55E, #166534, #16A34A);
+  background-size: 400% 400%;
+  animation: waveShift 10s ease infinite;
+}
+
+/* ===================== PULSE (overdue debts) ===================== */
+
+@keyframes subtlePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.10), 0 2px 8px rgba(0,0,0,0.06); }
+  50%       { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0), 0 2px 8px rgba(0,0,0,0.06); }
+}
+
+.pulse-danger {
+  animation: subtlePulse 2.4s ease-in-out infinite;
+}
+
+/* ===================== 3D ANIMATIONS ===================== */
+
+@keyframes appOpen {
+  0%   { opacity: 0; transform: perspective(800px) translateZ(-40px) rotateX(4deg); }
+  100% { opacity: 1; transform: perspective(800px) translateZ(0) rotateX(0deg); }
+}
+
+@keyframes stagger3dIn {
+  0%   { opacity: 0; transform: perspective(600px) translateZ(-24px) rotateX(8deg) translateY(10px); }
+  60%  { transform: perspective(600px) translateZ(2px) rotateX(-1deg) translateY(-1px); }
+  100% { opacity: 1; transform: perspective(600px) translateZ(0) rotateX(0deg) translateY(0); }
+}
+
+@keyframes totalFlip {
+  0%   { opacity: 0; transform: perspective(300px) rotateX(-70deg) scaleY(0.6); }
+  60%  { transform: perspective(300px) rotateX(6deg) scaleY(1.04); }
+  100% { opacity: 1; transform: perspective(300px) rotateX(0deg) scaleY(1); }
+}
+
+@keyframes successFlip {
+  0%   { opacity: 0; transform: perspective(500px) rotateY(-80deg) scale(0.9); }
+  65%  { transform: perspective(500px) rotateY(6deg) scale(1.02); }
+  100% { opacity: 1; transform: perspective(500px) rotateY(0deg) scale(1); }
+}
+
+@keyframes cartBounce {
+  0%   { transform: perspective(300px) scale(1) translateZ(0); }
+  30%  { transform: perspective(300px) scale(1.18) translateZ(10px); }
+  60%  { transform: perspective(300px) scale(0.95) translateZ(-2px); }
+  80%  { transform: perspective(300px) scale(1.06) translateZ(4px); }
+  100% { transform: perspective(300px) scale(1) translateZ(0); }
+}
+
+@keyframes bottomSheetIn {
+  0%   { transform: translateY(100%); }
+  100% { transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fabIn {
+  0%   { opacity: 0; transform: scale(0.7) translateY(20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes pageSlideIn {
+  from { opacity: 0; transform: translateX(10px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  15%       { transform: translateX(-7px); }
+  35%       { transform: translateX(7px); }
+  55%       { transform: translateX(-4px); }
+  75%       { transform: translateX(4px); }
+  90%       { transform: translateX(-2px); }
+}
+
+@keyframes popIn {
+  from { opacity: 0; transform: scale(0.88); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes ptrSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+@keyframes ptrBounce {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-3px); }
+}
+
+/* ===================== UTILITY CLASSES ===================== */
+
+.anim-app-open {
+  animation: appOpen 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-slide-up {
+  animation: slideUp 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.anim-fade-in {
+  animation: fadeIn 200ms ease-out both;
+}
+
+.anim-success {
+  animation: successFlip 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.total-pop {
+  display: inline-block;
+  animation: totalFlip 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.cart-bounce {
+  display: inline-block;
+  animation: cartBounce 360ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ===================== PRESSABLE ===================== */
+
+.pressable {
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  transform-style: preserve-3d;
+  transition: transform 130ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 130ms ease-out;
+}
+
+.pressable:active {
+  transform: perspective(400px) rotateX(8deg) scale(0.96) translateY(2px) !important;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.10) !important;
+}
+
+/* ===================== BOTTOM SHEET ===================== */
+
+.sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.48);
+  z-index: 1000;
+  display: flex;
+  align-items: flex-end;
+  animation: fadeIn 200ms ease-out both;
+}
+
+.sheet-body {
+  width: 100%;
+  background: #fff;
+  border-radius: 24px 24px 0 0;
+  padding: 20px 20px 36px;
+  animation: bottomSheetIn 340ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.sheet-handle {
+  width: 36px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--border);
+  margin: 0 auto 20px;
+}
+
+/* ===================== STAGGER LIST ===================== */
+
+.stagger-list > * {
+  animation: stagger3dIn 300ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.stagger-list > *:nth-child(1)  { animation-delay: 0ms; }
+.stagger-list > *:nth-child(2)  { animation-delay: 50ms; }
+.stagger-list > *:nth-child(3)  { animation-delay: 100ms; }
+.stagger-list > *:nth-child(4)  { animation-delay: 150ms; }
+.stagger-list > *:nth-child(5)  { animation-delay: 200ms; }
+.stagger-list > *:nth-child(6)  { animation-delay: 250ms; }
+.stagger-list > *:nth-child(7)  { animation-delay: 300ms; }
+.stagger-list > *:nth-child(8)  { animation-delay: 350ms; }
+.stagger-list > *:nth-child(n+9){ animation-delay: 390ms; }
+
+/* ===================== FAB ===================== */
+
+.fab {
+  position: fixed;
+  bottom: 86px;
+  right: 50%;
+  transform: translateX(50%);
+  animation: fabIn 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  z-index: 100;
+  width: auto;
+  max-width: 200px;
+  padding: 15px 28px;
+  border-radius: 99px;
+  border: none;
+  background: var(--primary);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  box-shadow: 0 6px 20px rgba(22, 163, 74, 0.38), 0 2px 6px rgba(22, 163, 74, 0.22);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.fab:active {
+  transform: translateX(50%) scale(0.95) !important;
+  box-shadow: 0 3px 10px rgba(22, 163, 74, 0.28) !important;
+}
+
+/* ===================== PAGE TRANSITION ===================== */
+
+.anim-page-in {
+  animation: pageSlideIn 200ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ===================== SHAKE (errors) ===================== */
+
+.anim-shake {
+  animation: shake 300ms cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* ===================== POP-IN (modals, popups) ===================== */
+
+.anim-pop-in {
+  animation: popIn 180ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* ===================== CARD PRESS ===================== */
+
+.card-pressable {
+  -webkit-tap-highlight-color: transparent;
+  cursor: pointer;
+  transition: transform 120ms cubic-bezier(0.34, 1.56, 0.64, 1),
+              box-shadow 120ms ease-out;
+  will-change: transform;
+}
+
+.card-pressable:active {
+  transform: scale(0.98) !important;
+  box-shadow: 0 1px 4px rgba(15,23,42,0.06) !important;
+}
+
+/* ===================== PULL TO REFRESH ===================== */
+
+.ptr-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  overflow: hidden;
+  transition: height 80ms ease-out;
+}
+
+.ptr-spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid var(--primary-light);
+  border-top-color: var(--primary);
+  animation: ptrSpin 0.7s linear infinite;
+}
+
+.ptr-check {
+  color: var(--primary);
+  font-size: 18px;
+  animation: ptrBounce 0.4s ease both;
+}
+
+/* ===================== RIPPLE ===================== */
+
+@keyframes rippleExpand {
+  from { transform: translate(-50%, -50%) scale(0); opacity: 0.30; }
+  to   { transform: translate(-50%, -50%) scale(4);  opacity: 0; }
+}
+
+.ripple-wave {
+  position: absolute;
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(22, 163, 74, 0.20);
+  pointer-events: none;
+  animation: rippleExpand 380ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* ===================== FLOATING SUCCESS CARD ===================== */
+
+@keyframes successFloat {
+  0%   { opacity: 0; transform: scale(0.78) translateY(18px); }
+  55%  { transform: scale(1.05) translateY(-4px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes successFadeOut {
+  0%   { opacity: 1; transform: scale(1) translateY(0); }
+  100% { opacity: 0; transform: scale(0.90) translateY(-10px); }
+}
+
+.anim-success-card-in  { animation: successFloat   300ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+.anim-success-card-out { animation: successFadeOut 200ms ease-in both; }
+
+/* ===================== CHECKMARK POP ===================== */
+
+@keyframes checkmarkPop {
+  0%   { transform: scale(0) rotate(-15deg); opacity: 0; }
+  55%  { transform: scale(1.30) rotate(5deg);  opacity: 1; }
+  100% { transform: scale(1)   rotate(0deg);  opacity: 1; }
+}
+
+.anim-checkmark { animation: checkmarkPop 380ms cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
+/* ===================== BREATHE (overdue badge) ===================== */
+
+@keyframes breathe {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.55; transform: scale(0.92); }
+}
+
+.anim-breathe { animation: breathe 2.2s ease-in-out infinite; }
+
+/* ===================== LOW STOCK DOT PULSE ===================== */
+
+@keyframes dotGlow {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(239, 68, 68, 0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(239, 68, 68, 0); }
+}
+
+.low-stock-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--danger);
+  margin-right: 5px;
+  vertical-align: middle;
+  animation: dotGlow 2.4s ease-in-out infinite;
+}
+
+/* ===================== FILTER GRID TRANSITION ===================== */
+
+@keyframes filterIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.filter-in { animation: filterIn 160ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+/* ===================== COUNT-UP NUMBER ===================== */
+
+@keyframes numFlash {
+  0%   { color: var(--primary); }
+  100% { color: inherit; }
+}
+
+/* ===================== CARD STAGGER (home / report) ===================== */
+
+.home-stagger > * {
+  animation: slideUp 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.home-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.home-stagger > *:nth-child(2) { animation-delay: 60ms; }
+.home-stagger > *:nth-child(3) { animation-delay: 120ms; }
+.home-stagger > *:nth-child(4) { animation-delay: 180ms; }
+.home-stagger > *:nth-child(5) { animation-delay: 240ms; }

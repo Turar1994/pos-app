@@ -1,8 +1,10 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
+import { useCountUp } from '@/lib/useCountUp'
+import { usePullToRefresh } from '@/lib/usePullToRefresh'
 
 type Product = { id: string; name: string; price: number; quantity: number; unit?: string; category?: string; barcode?: string }
 type CartItem = { product: Product; qty: number; amount: number }
@@ -41,7 +43,20 @@ export default function SalePage() {
   const [scanSuccess, setScanSuccess] = useState(false)
   const [torchOn, setTorchOn] = useState(false)
   const [hint, setHint] = useState(0)
+  type FlyDot = { id: number; startX: number; startY: number; dx: number; dy: number; active: boolean; icon: string }
+  const [flyDots, setFlyDots] = useState<FlyDot[]>([])
+  const [cartBounceAnim, setCartBounceAnim] = useState(false)
+  const [newCartIds, setNewCartIds] = useState<Set<string>>(new Set())
+  const [totalKey, setTotalKey] = useState(0)
+  const prevTotalRef = useRef(0)
+  const cartSectionRef = useRef<HTMLDivElement>(null)
+  const [pressedId, setPressedId] = useState<string | null>(null)
+  type Ripple = { id: number; productId: string; x: number; y: number }
+  const [ripples, setRipples] = useState<Ripple[]>([])
+  const [successFading, setSuccessFading] = useState(false)
+  const [salesCount, setSalesCount] = useState<Record<string, number>>({})
 
+  const searchRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const readerRef = useRef<any>(null)
@@ -52,15 +67,26 @@ export default function SalePage() {
   const hintTimerRef = useRef<any>(null)
   const scanningRef = useRef(false)
 
-  useEffect(() => { loadProducts() }, [store.id])
-  useEffect(() => { productsRef.current = products }, [products])
-
-  async function loadProducts() {
+  const loadData = useCallback(async () => {
     const supabase = createClient()
-    const { data } = await supabase.from('products').select('*')
-      .eq('store_id', store.id).gt('quantity', 0).order('name')
-    setProducts(data || [])
-  }
+    const [prodRes, salesRes] = await Promise.all([
+      supabase.from('products').select('*').eq('store_id', store.id).gt('quantity', 0).order('name'),
+      supabase.from('sales').select('product_id').eq('store_id', store.id)
+    ])
+    const counts: Record<string, number> = {}
+    salesRes.data?.forEach(s => { if (s.product_id) counts[s.product_id] = (counts[s.product_id] || 0) + 1 })
+    setSalesCount(counts)
+    setProducts(prodRes.data || [])
+  }, [store.id])
+
+  const ptr = usePullToRefresh(loadData)
+
+  useEffect(() => { loadData() }, [store.id])
+  useEffect(() => { productsRef.current = products }, [products])
+  // Auto-focus search on mount
+  useEffect(() => { setTimeout(() => searchRef.current?.focus(), 120) }, [])
+
+  async function loadProducts() { await loadData() }
 
   function unlockAudio() {
     try {
@@ -221,15 +247,61 @@ export default function SalePage() {
     setTimeout(() => { setScanMsg(''); setScanSuccess(false) }, 1200)
   }
 
-  function addToCart(product: Product) {
+  function addToCart(product: Product, e?: React.MouseEvent) {
     if (product.unit === 'кг') { setKgModal(product); setKgValue(''); return }
+
+    // Haptic
+    if (navigator.vibrate) navigator.vibrate(28)
+
+    // Ripple
+    if (e) {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      const r: Ripple = { id: Date.now(), productId: product.id, x: e.clientX - rect.left, y: e.clientY - rect.top }
+      setRipples(prev => [...prev, r])
+      setTimeout(() => setRipples(prev => prev.filter(ri => ri.id !== r.id)), 400)
+    }
+
     const ex = cart.find(c => c.product.id === product.id)
     if (ex) {
       if (ex.qty >= product.quantity) return
       setCart(cart.map(c => c.product.id === product.id
         ? { ...c, qty: c.qty + 1, amount: (c.qty + 1) * product.price } : c))
     } else {
-      setCart([...cart, { product, qty: 1, amount: product.price }])
+      setCart(prev => [...prev, { product, qty: 1, amount: product.price }])
+      setNewCartIds(prev => new Set(prev).add(product.id))
+      setTimeout(() => setNewCartIds(prev => { const s = new Set(prev); s.delete(product.id); return s }), 500)
+    }
+
+    // Arc fly animation
+    if (e) {
+      const catIcon = product.category
+        ? ({ drinks:'🥤',bread:'🍞',dairy:'🥛',sweets:'🍫',meat:'🥩',fruits:'🍎',vegetables:'🥦',grocery:'🍜',hygiene:'🧴',other:'📦' } as any)[product.category] ?? '🛒'
+        : '🛒'
+      const cardRect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+      const startX = cardRect.left + cardRect.width / 2
+      const startY = cardRect.top + cardRect.height / 2
+
+      let endX = window.innerWidth / 2
+      let endY = window.innerHeight - 90
+      if (cartSectionRef.current) {
+        const cartRect = cartSectionRef.current.getBoundingClientRect()
+        endX = cartRect.left + 60
+        endY = cartRect.top + 20
+      }
+
+      const id = Date.now()
+      const dot: FlyDot = { id, startX, startY, dx: endX - startX, dy: endY - startY, active: false, icon: catIcon }
+      setFlyDots(prev => [...prev, dot])
+
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        setFlyDots(prev => prev.map(d => d.id === id ? { ...d, active: true } : d))
+      }))
+
+      setTimeout(() => {
+        setFlyDots(prev => prev.filter(d => d.id !== id))
+        setCartBounceAnim(true)
+        setTimeout(() => setCartBounceAnim(false), 320)
+      }, 360)
     }
   }
 
@@ -259,6 +331,14 @@ export default function SalePage() {
   }
 
   const totalAmount = cart.reduce((s, c) => s + c.amount, 0)
+  const displayTotal = useCountUp(totalAmount, 280)
+
+  useEffect(() => {
+    if (prevTotalRef.current !== totalAmount) {
+      setTotalKey(k => k + 1)
+      prevTotalRef.current = totalAmount
+    }
+  }, [totalAmount])
 
   async function handleSale(isDebt = false) {
     if (cart.length === 0 || (isDebt && !debtorName)) return
@@ -292,16 +372,20 @@ export default function SalePage() {
       }
       await supabase.from('products').update({ quantity: prod.quantity - item.qty }).eq('id', item.product.id)
     }
-    setCart([]); setDebtorName(''); setDebtorPhone(''); setDueDate(''); setShowDebtForm(false)
-    setSuccess(isDebt ? (lang === 'kz' ? '✅ Қарыз тіркелді!' : '✅ Долг записан!') : (lang === 'kz' ? '✅ Сатылды!' : '✅ Продано!'))
-    setTimeout(() => setSuccess(''), 2000)
+    if (navigator.vibrate) navigator.vibrate([40, 20, 40])
+    setCart([]); setSearch(''); setDebtorName(''); setDebtorPhone(''); setDueDate(''); setShowDebtForm(false); setSelectedCat(null)
+    const msg = isDebt ? (lang === 'kz' ? 'Қарыз тіркелді' : 'Долг записан') : (lang === 'kz' ? 'Сатылды!' : 'Продано!')
+    setSuccessFading(false)
+    setSuccess(msg)
+    setTimeout(() => setSuccessFading(true), 800)
+    setTimeout(() => { setSuccess(''); setSuccessFading(false); searchRef.current?.focus() }, 1050)
     setLoading(false); triggerRefresh(); loadProducts()
   }
 
-  const filtered = products.filter(p =>
-    p.name.toLowerCase().includes(search.toLowerCase()) &&
-    (selectedCat === null || p.category === selectedCat)
-  )
+  const searchNorm = search.trim().replace(/\s+/g, ' ').toLowerCase()
+  const filtered = products
+    .filter(p => p.name.toLowerCase().includes(searchNorm) && (selectedCat === null || p.category === selectedCat))
+    .sort((a, b) => (salesCount[b.id] || 0) - (salesCount[a.id] || 0))
   const availableCats = CATEGORIES.filter(c => products.some(p => p.category === c.key))
   const showCategoryGrid = !search && selectedCat === null
   const hintText = hint >= 1
@@ -310,24 +394,78 @@ export default function SalePage() {
 
   return (
     <div>
+      {/* Floating success card */}
+      {success && (
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 9998,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          pointerEvents: 'none',
+        }}>
+          <div className={successFading ? 'anim-success-card-out' : 'anim-success-card-in'} style={{
+            background: '#fff',
+            borderRadius: 28,
+            padding: '32px 52px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
+            boxShadow: '0 24px 64px rgba(15,23,42,0.16), 0 6px 20px rgba(15,23,42,0.08)',
+          }}>
+            <span className="anim-checkmark" style={{ fontSize: 56, lineHeight: 1 }}>✅</span>
+            <span style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)' }}>{success}</span>
+          </div>
+        </div>
+      )}
+
+      {/* Arc fly animation — outer moves X, inner moves Y (arc path) */}
+      {flyDots.map(dot => (
+        <div key={dot.id} style={{
+          position: 'fixed',
+          left: dot.startX - 18,
+          top: dot.startY - 18,
+          width: 36,
+          height: 36,
+          zIndex: 9999,
+          pointerEvents: 'none',
+          transition: dot.active ? 'transform 330ms cubic-bezier(0.25, 0.46, 0.45, 0.94)' : 'none',
+          transform: dot.active ? `translateX(${dot.dx}px)` : 'translateX(0)',
+        }}>
+          <div style={{
+            width: 36,
+            height: 36,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontSize: 22,
+            borderRadius: '50%',
+            background: 'var(--primary)',
+            boxShadow: '0 4px 14px rgba(22,163,74,0.40)',
+            transition: dot.active ? 'transform 330ms cubic-bezier(0.55, 0.055, 0.675, 0.19), opacity 330ms ease-in' : 'none',
+            transform: dot.active ? `translateY(${dot.dy}px) scale(0.22)` : 'translateY(0) scale(1)',
+            opacity: dot.active ? 0 : 1,
+          }}>
+            {dot.icon}
+          </div>
+        </div>
+      ))}
+
+      {/* KG Bottom Sheet */}
       {kgModal && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ background: '#fff', borderRadius: 12, padding: 20, width: '100%', maxWidth: 320 }}>
-            <div style={{ fontWeight: 600, fontSize: 16, marginBottom: 4 }}>{kgModal.name}</div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 12 }}>
+        <div className="sheet-overlay" onClick={() => setKgModal(null)}>
+          <div className="sheet-body" onClick={e => e.stopPropagation()}>
+            <div className="sheet-handle" />
+            <div style={{ fontWeight: 700, fontSize: 18, marginBottom: 4 }}>{kgModal.name}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16 }}>
               {lang === 'kz' ? `Қалдық: ${kgModal.quantity} кг` : `Остаток: ${kgModal.quantity} кг`}
             </div>
             <input type="number" step="0.001" placeholder="0.000" value={kgValue}
               onChange={e => setKgValue(e.target.value)} autoFocus
-              style={{ marginBottom: 8, fontSize: 22, textAlign: 'center', fontWeight: 600 }} />
+              style={{ marginBottom: 10, fontSize: 28, textAlign: 'center', fontWeight: 700, border: '2px solid var(--accent)', borderRadius: 12 }} />
             {kgValue && parseFloat(kgValue) > 0 && (
-              <div style={{ textAlign: 'center', fontSize: 15, marginBottom: 12, color: '#185FA5', fontWeight: 600 }}>
+              <div style={{ textAlign: 'center', fontSize: 17, marginBottom: 16, color: 'var(--accent)', fontWeight: 700 }}>
                 = {(parseFloat(kgValue) * kgModal.price).toLocaleString()} ₸
               </div>
             )}
             <div className="row-2">
-              <button className="btn btn-primary" onClick={addKgToCart}>{lang === 'kz' ? 'Қосу' : 'Добавить'}</button>
-              <button className="btn" onClick={() => setKgModal(null)}>{lang === 'kz' ? 'Болдырмау' : 'Отмена'}</button>
+              <button className="btn btn-primary pressable" onClick={addKgToCart}>{lang === 'kz' ? 'Қосу' : 'Добавить'}</button>
+              <button className="btn pressable" onClick={() => setKgModal(null)}>{lang === 'kz' ? 'Болдырмау' : 'Отмена'}</button>
             </div>
           </div>
         </div>
@@ -398,9 +536,22 @@ export default function SalePage() {
         </div>
       )}
 
+      {(ptr.progress > 0 || ptr.refreshing) && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 48, opacity: ptr.refreshing ? 1 : ptr.progress }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2.5px solid var(--primary-light)', borderTopColor: 'var(--primary)', animation: ptr.refreshing ? 'ptrSpin 0.7s linear infinite' : 'none', transform: ptr.refreshing ? 'none' : `rotate(${ptr.progress * 270}deg)` }} />
+        </div>
+      )}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <input placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
-          value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
+        <input
+          ref={searchRef}
+          placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          style={{ flex: 1 }}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck={false}
+        />
         <button onClick={startScanner} style={{
           padding: '0 14px', borderRadius: 8, border: '1px solid var(--border)',
           background: '#fff', cursor: 'pointer', fontSize: 22, flexShrink: 0
@@ -408,14 +559,27 @@ export default function SalePage() {
       </div>
 
       {showCategoryGrid ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="stagger-list">
           {availableCats.map(c => (
-            <button key={c.key} onClick={() => setSelectedCat(c.key)} style={{
-              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '18px 8px', border: '2px solid var(--border)', borderRadius: 16,
-              background: '#fff', cursor: 'pointer', gap: 8,
-              boxShadow: '0 2px 6px rgba(0,0,0,0.05)', transition: 'all 0.15s'
-            }}>
+            <button key={c.key}
+              onClick={() => setSelectedCat(c.key)}
+              onPointerDown={() => setPressedId('cat-' + c.key)}
+              onPointerUp={() => setPressedId(null)}
+              onPointerLeave={() => setPressedId(null)}
+              style={{
+                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                padding: '18px 8px', border: '2px solid var(--border)', borderRadius: 16,
+                background: '#fff', gap: 8, cursor: 'pointer',
+                WebkitTapHighlightColor: 'transparent',
+                boxShadow: pressedId === 'cat-' + c.key
+                  ? '0 1px 3px rgba(0,0,0,0.10)'
+                  : '0 4px 12px rgba(0,0,0,0.07)',
+                transform: pressedId === 'cat-' + c.key
+                  ? 'perspective(400px) rotateX(10deg) scale(0.95) translateY(3px)'
+                  : 'perspective(400px) rotateX(0deg) scale(1) translateY(0)',
+                transition: 'transform 140ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease-out',
+                transformStyle: 'preserve-3d',
+              }}>
               <span style={{ fontSize: 40 }}>{c.icon}</span>
               <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3 }}>
                 {lang === 'kz' ? c.kz : c.ru}
@@ -440,23 +604,44 @@ export default function SalePage() {
               </span>
             </div>
           )}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <div key={search + '|' + String(selectedCat)} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }} className="filter-in">
             {filtered.map(p => (
-              <div key={p.id} onClick={() => addToCart(p)} style={{
-                background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
-                padding: '12px', cursor: 'pointer', userSelect: 'none',
-                boxShadow: '0 1px 4px rgba(0,0,0,0.04)'
-              }}>
+              <div key={p.id}
+                onClick={(e) => addToCart(p, e)}
+                onPointerDown={() => setPressedId('prod-' + p.id)}
+                onPointerUp={() => setPressedId(null)}
+                onPointerLeave={() => setPressedId(null)}
+                style={{
+                  position: 'relative', overflow: 'hidden',
+                  background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
+                  padding: '12px', userSelect: 'none', cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                  boxShadow: pressedId === 'prod-' + p.id
+                    ? '0 1px 2px rgba(0,0,0,0.08)'
+                    : '0 2px 8px rgba(0,0,0,0.06)',
+                  transform: pressedId === 'prod-' + p.id
+                    ? 'perspective(400px) rotateX(10deg) scale(0.95) translateY(3px)'
+                    : 'perspective(400px) rotateX(0deg) scale(1) translateY(0)',
+                  transition: 'transform 140ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease-out',
+                  transformStyle: 'preserve-3d',
+                }}>
+                {ripples.filter(r => r.productId === p.id).map(r => (
+                  <span key={r.id} className="ripple-wave" style={{ left: r.x, top: r.y }} />
+                ))}
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 5 }}>{p.name}</div>
                 <div style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>{p.price.toLocaleString()} ₸</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>/{p.unit || 'шт'}</div>
-                <div style={{ fontSize: 11, color: p.quantity <= 5 ? '#D85A30' : 'var(--muted)', marginTop: 4 }}>
-                  {lang === 'kz' ? 'Қалдық:' : 'Остаток:'} {p.quantity} {p.unit || 'шт'}
+                <div style={{ fontSize: 11, marginTop: 4, display: 'flex', alignItems: 'center' }}>
+                  {p.quantity <= 5 && <span className="low-stock-dot" style={{ background: p.quantity <= 2 ? 'var(--danger)' : 'var(--warning)' }} />}
+                  <span style={{ color: p.quantity <= 2 ? 'var(--danger)' : p.quantity <= 5 ? 'var(--warning)' : 'var(--muted)' }}>
+                    {lang === 'kz' ? 'Қалдық:' : 'Остаток:'} {p.quantity} {p.unit || 'шт'}
+                  </span>
                 </div>
               </div>
             ))}
             {filtered.length === 0 && (
-              <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: 24, color: 'var(--muted)', fontSize: 14 }}>
+              <div className="anim-fade-in" style={{ gridColumn: '1/-1', textAlign: 'center', padding: '36px 24px', color: 'var(--muted)', fontSize: 14 }}>
+                <div style={{ fontSize: 40, marginBottom: 10 }}>🔍</div>
                 {lang === 'kz' ? 'Товар табылмады' : 'Товары не найдены'}
               </div>
             )}
@@ -465,45 +650,65 @@ export default function SalePage() {
       )}
 
       {cart.length > 0 && (
-        <div className="card">
-          <div className="section-title">{lang === 'kz' ? 'Корзина' : 'Корзина'}</div>
+        <div className="card" ref={cartSectionRef}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+            <span
+              className={cartBounceAnim ? 'cart-bounce' : ''}
+              style={{ fontSize: 22, display: 'inline-block' }}
+            >🛒</span>
+            <span className="section-title" style={{ marginBottom: 0 }}>
+              {lang === 'kz' ? 'Корзина' : 'Корзина'} · {cart.reduce((s, c) => s + c.qty, 0)} {lang === 'kz' ? 'дана' : 'шт'}
+            </span>
+          </div>
           {cart.map(item => (
-            <div key={item.product.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid #f3f4f6' }}>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 13, fontWeight: 500 }}>{item.product.name}</div>
-                <div style={{ fontSize: 12, color: '#6b7280' }}>{item.product.price.toLocaleString()} ₸/{item.product.unit || 'шт'}</div>
+            <div key={item.product.id}
+              className={newCartIds.has(item.product.id) ? 'anim-slide-up' : ''}
+              style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--border)', gap: 8 }}>
+              {/* Left: name + unit price */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.product.name}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 1 }}>{item.product.price.toLocaleString()} ₸/{item.product.unit || 'шт'}</div>
               </div>
+              {/* Right: controls */}
               {item.product.unit === 'кг' ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>{item.qty} кг</span>
-                  <span style={{ fontWeight: 600, fontSize: 13 }}>{item.amount.toLocaleString()} ₸</span>
-                  <span onClick={() => removeFromCart(item.product.id)} style={{ color: '#D85A30', cursor: 'pointer', fontSize: 16 }}>✕</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+                  <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary)' }}>{item.amount.toLocaleString()} ₸</span>
+                  <button onClick={() => removeFromCart(item.product.id)} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'var(--danger-light)', color: '#B91C1C', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 </div>
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <button onClick={() => updateQty(item.product.id, -1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 16 }}>−</button>
-                  <span style={{ minWidth: 24, textAlign: 'center', fontSize: 14, fontWeight: 600 }}>{item.qty}</span>
-                  <button onClick={() => updateQty(item.product.id, 1)} style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e5e7eb', background: '#f9fafb', cursor: 'pointer', fontSize: 16 }}>+</button>
-                  <span style={{ fontWeight: 600, fontSize: 13, minWidth: 56, textAlign: 'right' }}>{item.amount.toLocaleString()} ₸</span>
-                  <span onClick={() => removeFromCart(item.product.id)} style={{ color: '#D85A30', cursor: 'pointer', fontSize: 16 }}>✕</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                  <button onClick={() => updateQty(item.product.id, -1)} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'var(--surface)', cursor: 'pointer', fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent' }}>−</button>
+                  <span style={{ minWidth: 28, textAlign: 'center', fontSize: 15, fontWeight: 700 }}>{item.qty}</span>
+                  <button onClick={() => updateQty(item.product.id, 1)} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'var(--primary-light)', color: 'var(--primary-dark)', cursor: 'pointer', fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent' }}>+</button>
+                  <span style={{ fontWeight: 700, fontSize: 14, minWidth: 52, textAlign: 'right', color: 'var(--primary)' }}>{item.amount.toLocaleString()} ₸</span>
+                  <button onClick={() => removeFromCart(item.product.id)} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'var(--danger-light)', color: '#B91C1C', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent' }}>✕</button>
                 </div>
               )}
             </div>
           ))}
           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '10px 0', fontWeight: 700, fontSize: 16, borderTop: '2px solid #e5e7eb', marginTop: 4 }}>
             <span>{lang === 'kz' ? 'Жалпы' : 'Итого'}</span>
-            <span>{totalAmount.toLocaleString()} ₸</span>
+            <span style={{ color: 'var(--accent)', transition: 'color 150ms' }}>{displayTotal.toLocaleString()} ₸</span>
           </div>
-          <select value={payType} onChange={e => setPayType(e.target.value as 'cash' | 'kaspi')} style={{ marginBottom: 8 }}>
-            <option value="cash">{T.cash}</option>
-            <option value="kaspi">Kaspi</option>
-          </select>
-          {success && <div style={{ background: '#E1F5EE', borderRadius: 6, padding: '8px 12px', color: '#085041', fontSize: 14, textAlign: 'center', marginBottom: 8 }}>{success}</div>}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+            {(['cash', 'kaspi'] as const).map(pt => (
+              <button key={pt} onClick={() => setPayType(pt)} style={{
+                padding: '13px 8px', borderRadius: 12, cursor: 'pointer',
+                border: `2px solid ${payType === pt ? 'var(--primary)' : 'var(--border)'}`,
+                background: payType === pt ? 'var(--primary-light)' : '#fff',
+                color: payType === pt ? 'var(--primary-dark)' : 'var(--muted)',
+                fontWeight: payType === pt ? 700 : 500, fontSize: 15,
+                transition: 'all 0.15s', WebkitTapHighlightColor: 'transparent',
+              }}>
+                {pt === 'cash' ? `💵 ${T.cash}` : '📱 Kaspi'}
+              </button>
+            ))}
+          </div>
           <div className="row-2">
-            <button className="btn btn-success" onClick={() => handleSale(false)} disabled={loading}>
+            <button className="btn btn-success pressable" onClick={() => handleSale(false)} disabled={loading}>
               {loading ? T.loading : (lang === 'kz' ? '✓ Сату' : '✓ Продать')}
             </button>
-            <button className="btn" onClick={() => setShowDebtForm(!showDebtForm)} style={{ borderColor: '#D97706', color: '#D97706' }}>
+            <button className="btn pressable" onClick={() => setShowDebtForm(!showDebtForm)} style={{ borderColor: '#D97706', color: '#D97706' }}>
               💳 {lang === 'kz' ? 'Қарызға' : 'В долг'}
             </button>
           </div>

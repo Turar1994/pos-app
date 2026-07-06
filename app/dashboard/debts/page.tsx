@@ -1,8 +1,10 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
+import { fmtDate } from '@/lib/date'
+import { usePullToRefresh } from '@/lib/usePullToRefresh'
 
 type Debt = {
   id: string
@@ -15,6 +17,7 @@ type Debt = {
   due_date: string | null
   is_paid: boolean
   created_at: string
+  paid_at?: string
 }
 
 export default function DebtsPage() {
@@ -23,6 +26,9 @@ export default function DebtsPage() {
   const [debts, setDebts] = useState<Debt[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<'unpaid' | 'paid' | 'all'>('unpaid')
+  const [paidAnimId, setPaidAnimId] = useState<string | null>(null)
+
+  const ptr = usePullToRefresh(useCallback(() => loadDebts(), [store.id]))
 
   useEffect(() => { loadDebts() }, [store.id])
 
@@ -35,8 +41,10 @@ export default function DebtsPage() {
   }
 
   async function markPaid(id: string) {
+    if (navigator.vibrate) navigator.vibrate(50)
+    setPaidAnimId(id)
     await createClient().from('debts').update({ is_paid: true, paid_at: new Date().toISOString() }).eq('id', id)
-    loadDebts()
+    setTimeout(() => { setPaidAnimId(null); setFilter('paid'); loadDebts() }, 700)
   }
 
   async function deleteDebt(id: string) {
@@ -70,6 +78,11 @@ export default function DebtsPage() {
 
   return (
     <div>
+      {(ptr.progress > 0 || ptr.refreshing) && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 48, opacity: ptr.refreshing ? 1 : ptr.progress }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2.5px solid var(--primary-light)', borderTopColor: 'var(--primary)', animation: ptr.refreshing ? 'ptrSpin 0.7s linear infinite' : 'none', transform: ptr.refreshing ? 'none' : `rotate(${ptr.progress * 270}deg)` }} />
+        </div>
+      )}
       <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 12 }}>
         {lang === 'kz' ? 'Қарыздар' : 'Долги'}
       </h2>
@@ -101,14 +114,17 @@ export default function DebtsPage() {
       <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
         {[
           { key: 'unpaid', kz: 'Төленбеген', ru: 'Не оплачено' },
-          { key: 'paid', kz: 'Төленген', ru: 'Оплачено' },
-          { key: 'all', kz: 'Барлығы', ru: 'Все' },
+          { key: 'paid',   kz: 'Төленген',   ru: 'Оплачено' },
+          { key: 'all',    kz: 'Барлығы',    ru: 'Все' },
         ].map(f => (
           <button key={f.key} onClick={() => setFilter(f.key as any)} style={{
-            padding: '6px 14px', borderRadius: 6, border: '1px solid #e5e7eb',
-            background: filter === f.key ? '#185FA5' : '#fff',
-            color: filter === f.key ? '#fff' : '#6b7280',
-            cursor: 'pointer', fontSize: 13
+            padding: '8px 16px', borderRadius: 10,
+            border: `2px solid ${filter === f.key ? 'var(--primary)' : 'var(--border)'}`,
+            background: filter === f.key ? 'var(--primary-light)' : '#fff',
+            color: filter === f.key ? 'var(--primary-dark)' : 'var(--muted)',
+            fontWeight: filter === f.key ? 700 : 500,
+            cursor: 'pointer', fontSize: 13, transition: 'all 0.15s',
+            WebkitTapHighlightColor: 'transparent',
           }}>
             {lang === 'kz' ? f.kz : f.ru}
           </button>
@@ -122,46 +138,66 @@ export default function DebtsPage() {
       ) : filtered.map(d => {
         const overdue = isOverdue(d.due_date, d.is_paid)
         const dueSoon = isDueSoon(d.due_date, d.is_paid)
+        const borderColor = d.is_paid ? 'var(--primary)' : overdue ? 'var(--danger)' : dueSoon ? 'var(--warning)' : 'var(--blue)'
         return (
-          <div key={d.id} className="card" style={{
-            padding: 14, marginBottom: 8,
-            borderLeft: `4px solid ${d.is_paid ? '#0F6E56' : overdue ? '#D85A30' : dueSoon ? '#D97706' : '#185FA5'}`
+          <div key={d.id} className={overdue ? 'pulse-danger' : ''} style={{
+            position: 'relative', overflow: 'hidden',
+            background: '#fff', borderRadius: 18, padding: '16px', marginBottom: 10,
+            border: '1px solid var(--border)',
+            borderLeft: `4px solid ${borderColor}`,
+            boxShadow: '0 2px 8px rgba(15,23,42,0.06)',
+            transition: 'opacity 0.3s, transform 0.3s',
+            opacity: paidAnimId === d.id ? 0.5 : 1,
           }}>
+            {paidAnimId === d.id && (
+              <div style={{
+                position: 'absolute', inset: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(220, 252, 231, 0.85)', borderRadius: 18, zIndex: 2,
+              }}>
+                <span className="anim-checkmark" style={{ fontSize: 52 }}>✅</span>
+              </div>
+            )}
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                  <span style={{ fontWeight: 600, fontSize: 15 }}>{d.debtor_name}</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>{d.debtor_name}</span>
                   {d.is_paid
-                    ? <span className="badge badge-active">✅ {lang === 'kz' ? 'Төленді' : 'Оплачено'}</span>
+                    ? <span className="badge" style={{ background: 'var(--primary-light)', color: 'var(--primary-dark)' }}>✅ {lang === 'kz' ? 'Төленді' : 'Оплачено'}</span>
                     : overdue
-                      ? <span className="badge badge-low">❌ {lang === 'kz' ? 'Мерзімі өтті' : 'Просрочено'}</span>
+                      ? <span className="badge anim-breathe" style={{ background: 'var(--danger-light)', color: '#B91C1C' }}>🔴 {lang === 'kz' ? 'Мерзімі өтті' : 'Просрочено'}</span>
                       : dueSoon
-                        ? <span className="badge" style={{ background: '#FEF3C7', color: '#92400E' }}>⚠️ {lang === 'kz' ? 'Жақында' : 'Скоро'}</span>
-                        : <span className="badge" style={{ background: '#E6F1FB', color: '#0C447C' }}>💳 {lang === 'kz' ? 'Қарыз' : 'Долг'}</span>
+                        ? <span className="badge" style={{ background: 'var(--warning-light)', color: '#92400E' }}>⚠️ {lang === 'kz' ? 'Жақында' : 'Скоро'}</span>
+                        : <span className="badge" style={{ background: 'var(--blue-light)', color: '#1D4ED8' }}>💳 {lang === 'kz' ? 'Қарыз' : 'Долг'}</span>
                   }
                 </div>
-                <div style={{ fontSize: 13, color: '#6b7280', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <div style={{ fontSize: 13, color: 'var(--muted)', display: 'flex', gap: 10, flexWrap: 'wrap', lineHeight: 1.8 }}>
                   {d.debtor_phone && <span>📞 {d.debtor_phone}</span>}
                   {d.product_name && <span>📦 {d.product_name} × {d.quantity || 1}</span>}
-                  <span>📅 {new Date(d.created_at).toLocaleDateString('kk-KZ')}</span>
-                  {d.due_date && (
-                    <span style={{ color: overdue ? '#D85A30' : '#6b7280' }}>
-                      ⏰ {lang === 'kz' ? 'Мерзімі' : 'До'}: {new Date(d.due_date).toLocaleDateString('kk-KZ')}
+                  <span>📅 {fmtDate(d.created_at)}</span>
+                  {d.due_date && !d.is_paid && (
+                    <span style={{ color: overdue ? 'var(--danger)' : 'var(--muted)' }}>
+                      ⏰ {lang === 'kz' ? 'Дейін' : 'До'}: {fmtDate(d.due_date!)}
+                    </span>
+                  )}
+                  {d.is_paid && d.paid_at && (
+                    <span style={{ color: 'var(--primary)', fontWeight: 600 }}>
+                      ✅ {fmtDate(d.paid_at!)}
                     </span>
                   )}
                 </div>
               </div>
-              <div style={{ textAlign: 'right', marginLeft: 12 }}>
-                <div style={{ fontWeight: 700, fontSize: 16, color: d.is_paid ? '#0F6E56' : '#D85A30' }}>
+              <div style={{ textAlign: 'right', marginLeft: 14 }}>
+                <div style={{ fontWeight: 800, fontSize: 18, color: d.is_paid ? 'var(--primary)' : overdue ? 'var(--danger)' : 'var(--text)', letterSpacing: -0.5 }}>
                   {d.amount.toLocaleString()} ₸
                 </div>
-                <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+                <div style={{ display: 'flex', gap: 6, marginTop: 10, justifyContent: 'flex-end' }}>
                   {!d.is_paid && (
                     <button className="btn btn-sm btn-success" onClick={() => markPaid(d.id)}>
                       ✓ {lang === 'kz' ? 'Төленді' : 'Оплачено'}
                     </button>
                   )}
-                  <button className="btn btn-sm btn-danger" onClick={() => deleteDebt(d.id)}>🗑</button>
+                  <button className="btn btn-sm btn-danger" onClick={() => deleteDebt(d.id)} style={{ padding: '7px 10px' }}>🗑</button>
                 </div>
               </div>
             </div>

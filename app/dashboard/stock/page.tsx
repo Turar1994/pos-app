@@ -1,8 +1,9 @@
 'use client'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
+import { usePullToRefresh } from '@/lib/usePullToRefresh'
 
 type Product = { id: string; name: string; price: number; cost_price?: number; quantity: number; expiry_date?: string; category?: string; unit?: string; barcode?: string }
 
@@ -21,6 +22,133 @@ const CATEGORIES = [
 
 const UNITS = ['шт', 'кг']
 
+const SEED_PRODUCTS: { name: string; category: string; unit: string }[] = [
+  // Сусындар
+  { name: 'Су (0.5л)', category: 'drinks', unit: 'шт' },
+  { name: 'Су (1.5л)', category: 'drinks', unit: 'шт' },
+  { name: 'Газды су', category: 'drinks', unit: 'шт' },
+  { name: 'Шай (қара)', category: 'drinks', unit: 'шт' },
+  { name: 'Шай (жасыл)', category: 'drinks', unit: 'шт' },
+  { name: 'Нескафе', category: 'drinks', unit: 'шт' },
+  { name: 'Апельсин шырыны', category: 'drinks', unit: 'шт' },
+  { name: 'Алма шырыны', category: 'drinks', unit: 'шт' },
+  { name: 'Кола', category: 'drinks', unit: 'шт' },
+  { name: 'Fanta', category: 'drinks', unit: 'шт' },
+  { name: 'Sprite', category: 'drinks', unit: 'шт' },
+  { name: 'Айран', category: 'drinks', unit: 'шт' },
+  { name: 'Энергетик', category: 'drinks', unit: 'шт' },
+  { name: 'Боржоми', category: 'drinks', unit: 'шт' },
+  { name: 'Компот', category: 'drinks', unit: 'шт' },
+  // Нан өнімдері
+  { name: 'Нан (ақ)', category: 'bread', unit: 'шт' },
+  { name: 'Нан (қара)', category: 'bread', unit: 'шт' },
+  { name: 'Батон', category: 'bread', unit: 'шт' },
+  { name: 'Лаваш', category: 'bread', unit: 'шт' },
+  { name: 'Тоқаш', category: 'bread', unit: 'шт' },
+  { name: 'Сушки', category: 'bread', unit: 'кг' },
+  { name: 'Сухари', category: 'bread', unit: 'шт' },
+  { name: 'Печенье', category: 'bread', unit: 'кг' },
+  { name: 'Крекер', category: 'bread', unit: 'шт' },
+  { name: 'Пряник', category: 'bread', unit: 'кг' },
+  // Сүт өнімдері
+  { name: 'Сүт (1л)', category: 'dairy', unit: 'шт' },
+  { name: 'Кефир', category: 'dairy', unit: 'шт' },
+  { name: 'Сметана', category: 'dairy', unit: 'шт' },
+  { name: 'Творог', category: 'dairy', unit: 'шт' },
+  { name: 'Йогурт', category: 'dairy', unit: 'шт' },
+  { name: 'Ряженка', category: 'dairy', unit: 'шт' },
+  { name: 'Сыр (қатты)', category: 'dairy', unit: 'кг' },
+  { name: 'Сыр (балқытылған)', category: 'dairy', unit: 'шт' },
+  { name: 'Масло сливочное', category: 'dairy', unit: 'шт' },
+  { name: 'Маргарин', category: 'dairy', unit: 'шт' },
+  { name: 'Қаймақ', category: 'dairy', unit: 'шт' },
+  // Тәттілер
+  { name: 'Шоколад', category: 'sweets', unit: 'шт' },
+  { name: 'Карамель', category: 'sweets', unit: 'кг' },
+  { name: 'Ирис', category: 'sweets', unit: 'кг' },
+  { name: 'Мармелад', category: 'sweets', unit: 'кг' },
+  { name: 'Зефир', category: 'sweets', unit: 'кг' },
+  { name: 'Халва', category: 'sweets', unit: 'кг' },
+  { name: 'Вафли', category: 'sweets', unit: 'шт' },
+  { name: 'Козинак', category: 'sweets', unit: 'шт' },
+  { name: 'Конфеты ассорти', category: 'sweets', unit: 'кг' },
+  { name: 'Чупа-чупс', category: 'sweets', unit: 'шт' },
+  { name: 'Драже', category: 'sweets', unit: 'шт' },
+  // Ет өнімдері
+  { name: 'Сосиска', category: 'meat', unit: 'кг' },
+  { name: 'Колбаса (пісірілген)', category: 'meat', unit: 'кг' },
+  { name: 'Колбаса (ысталған)', category: 'meat', unit: 'кг' },
+  { name: 'Шужық', category: 'meat', unit: 'кг' },
+  { name: 'Тауық еті', category: 'meat', unit: 'кг' },
+  { name: 'Шпрот (консерва)', category: 'meat', unit: 'шт' },
+  { name: 'Тунец (консерва)', category: 'meat', unit: 'шт' },
+  { name: 'Сардина (консерва)', category: 'meat', unit: 'шт' },
+  { name: 'Тұшпара (пельмень)', category: 'meat', unit: 'кг' },
+  // Жемістер
+  { name: 'Алма', category: 'fruits', unit: 'кг' },
+  { name: 'Банан', category: 'fruits', unit: 'кг' },
+  { name: 'Апельсин', category: 'fruits', unit: 'кг' },
+  { name: 'Лимон', category: 'fruits', unit: 'кг' },
+  { name: 'Мандарин', category: 'fruits', unit: 'кг' },
+  { name: 'Жүзім', category: 'fruits', unit: 'кг' },
+  { name: 'Алмұрт', category: 'fruits', unit: 'кг' },
+  { name: 'Өрік', category: 'fruits', unit: 'кг' },
+  { name: 'Шабдалы', category: 'fruits', unit: 'кг' },
+  { name: 'Қарбыз', category: 'fruits', unit: 'кг' },
+  { name: 'Қауын', category: 'fruits', unit: 'кг' },
+  { name: 'Клубника', category: 'fruits', unit: 'кг' },
+  // Көкөністер
+  { name: 'Картоп', category: 'vegetables', unit: 'кг' },
+  { name: 'Пияз', category: 'vegetables', unit: 'кг' },
+  { name: 'Сәбіз', category: 'vegetables', unit: 'кг' },
+  { name: 'Қырыққабат', category: 'vegetables', unit: 'кг' },
+  { name: 'Қияр', category: 'vegetables', unit: 'кг' },
+  { name: 'Қызанақ', category: 'vegetables', unit: 'кг' },
+  { name: 'Сарымсақ', category: 'vegetables', unit: 'кг' },
+  { name: 'Қызылша', category: 'vegetables', unit: 'кг' },
+  { name: 'Болгар бурышы', category: 'vegetables', unit: 'кг' },
+  { name: 'Баклажан', category: 'vegetables', unit: 'кг' },
+  { name: 'Кабачок', category: 'vegetables', unit: 'кг' },
+  { name: 'Укроп/Петрушка', category: 'vegetables', unit: 'шт' },
+  // Бакалея
+  { name: 'Күріш', category: 'grocery', unit: 'кг' },
+  { name: 'Гречка', category: 'grocery', unit: 'кг' },
+  { name: 'Макарон', category: 'grocery', unit: 'шт' },
+  { name: 'Сұлы жармасы', category: 'grocery', unit: 'шт' },
+  { name: 'Манна жармасы', category: 'grocery', unit: 'кг' },
+  { name: 'Тары', category: 'grocery', unit: 'кг' },
+  { name: 'Тұз', category: 'grocery', unit: 'шт' },
+  { name: 'Қант', category: 'grocery', unit: 'кг' },
+  { name: 'Ұн', category: 'grocery', unit: 'кг' },
+  { name: 'Өсімдік майы', category: 'grocery', unit: 'шт' },
+  { name: 'Кетчуп', category: 'grocery', unit: 'шт' },
+  { name: 'Майонез', category: 'grocery', unit: 'шт' },
+  { name: 'Горчица', category: 'grocery', unit: 'шт' },
+  { name: 'Сірке суы', category: 'grocery', unit: 'шт' },
+  { name: 'Соевый соус', category: 'grocery', unit: 'шт' },
+  { name: 'Тушенка', category: 'grocery', unit: 'шт' },
+  { name: 'Бұршақ (консерва)', category: 'grocery', unit: 'шт' },
+  { name: 'Жүгері (консерва)', category: 'grocery', unit: 'шт' },
+  { name: 'Приправа', category: 'grocery', unit: 'шт' },
+  { name: 'Бульон кубигі', category: 'grocery', unit: 'шт' },
+  { name: 'Сода пищевая', category: 'grocery', unit: 'шт' },
+  // Тазалық
+  { name: 'Сабын (қатты)', category: 'hygiene', unit: 'шт' },
+  { name: 'Сабын (сұйық)', category: 'hygiene', unit: 'шт' },
+  { name: 'Шампунь', category: 'hygiene', unit: 'шт' },
+  { name: 'Гель для душа', category: 'hygiene', unit: 'шт' },
+  { name: 'Тіс пастасы', category: 'hygiene', unit: 'шт' },
+  { name: 'Тіс щеткасы', category: 'hygiene', unit: 'шт' },
+  { name: 'Дезодорант', category: 'hygiene', unit: 'шт' },
+  { name: 'Туалет қағазы', category: 'hygiene', unit: 'шт' },
+  { name: 'Қағаз орамал', category: 'hygiene', unit: 'шт' },
+  { name: 'Кір жуғыш ұнтақ', category: 'hygiene', unit: 'шт' },
+  { name: 'Ыдыс жуғыш', category: 'hygiene', unit: 'шт' },
+  { name: 'Мата жуғыш (кондиционер)', category: 'hygiene', unit: 'шт' },
+  { name: 'Мақта таяқшалары', category: 'hygiene', unit: 'шт' },
+  { name: 'Таңғыш (прокладки)', category: 'hygiene', unit: 'шт' },
+]
+
 export default function StockPage() {
   const { store, lang } = useApp()
   const T = t[lang]
@@ -28,6 +156,9 @@ export default function StockPage() {
   const [search, setSearch] = useState('')
   const [selectedCat, setSelectedCat] = useState<string | null>(null)
   const [showAdd, setShowAdd] = useState(false)
+  const [showSeed, setShowSeed] = useState(false)
+  const [seedCats, setSeedCats] = useState<Set<string>>(new Set(CATEGORIES.map(c => c.key)))
+  const [seeding, setSeeding] = useState(false)
   const [loading, setLoading] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [scanning, setScanning] = useState(false)
@@ -38,10 +169,27 @@ export default function StockPage() {
   const readerRef = useRef<any>(null)
   const scanningRef = useRef(false)
 
+  // Form field refs for auto-advance
+  const nameRef     = useRef<HTMLInputElement>(null)
+  const costRef     = useRef<HTMLInputElement>(null)
+  const priceRef    = useRef<HTMLInputElement>(null)
+  const qtyRef      = useRef<HTMLInputElement>(null)
+  const barcodeRef  = useRef<HTMLInputElement>(null)
+
+  // Auto-focus name when form opens
+  useEffect(() => { if (showAdd) setTimeout(() => nameRef.current?.focus(), 80) }, [showAdd])
+
+  function advance(next: React.RefObject<HTMLInputElement | null>) {
+    next.current?.focus()
+    next.current?.select()
+  }
+
   const [form, setForm] = useState({
     name: '', category: 'other', cost_price: '',
     price: '', quantity: '', unit: 'шт', expiry_date: '', barcode: ''
   })
+
+  const ptr = usePullToRefresh(useCallback(() => loadProducts(), [store.id]))
 
   useEffect(() => { loadProducts() }, [store.id])
 
@@ -72,15 +220,27 @@ export default function StockPage() {
     setShowAdd(false); setLoading(false); loadProducts()
   }
 
+  async function seedProducts() {
+    setSeeding(true)
+    const supabase = createClient()
+    const toInsert = SEED_PRODUCTS
+      .filter(p => seedCats.has(p.category))
+      .map(p => ({ store_id: store.id, name: p.name, category: p.category, unit: p.unit, price: 0, cost_price: 0, quantity: 0 }))
+    await supabase.from('products').insert(toInsert)
+    setShowSeed(false)
+    setSeeding(false)
+    loadProducts()
+  }
+
   async function deleteProduct(id: string) {
-    if (!confirm(lang === 'kz' ? 'Жоюға сенімдісіз бе?' : 'Вы уверены?')) return
+    if (!confirm(lang === 'kz' ? 'Бұл товарды жою керек пе?' : 'Удалить этот товар?')) return
     const supabase = createClient()
     // Алдымен sales/debts кестелеріндегі product_id сілтемелерін тазалап, FK constraint-тен өтеміз
     await supabase.from('sales').update({ product_id: null }).eq('product_id', id)
     await supabase.from('debts').update({ product_id: null }).eq('product_id', id)
     const { error } = await supabase.from('products').delete().eq('id', id)
     if (error) {
-      alert(lang === 'kz' ? '❌ Жою мүмкін болмады: ' + error.message : '❌ Не удалось удалить: ' + error.message)
+      alert(lang === 'kz' ? 'Жою мүмкін болмады. Қайтадан көріңіз.' : 'Не удалось удалить. Попробуйте ещё раз.')
       return
     }
     loadProducts()
@@ -180,6 +340,11 @@ export default function StockPage() {
 
   return (
     <div>
+      {(ptr.progress > 0 || ptr.refreshing) && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 48, opacity: ptr.refreshing ? 1 : ptr.progress }}>
+          <div style={{ width: 28, height: 28, borderRadius: '50%', border: '2.5px solid var(--primary-light)', borderTopColor: 'var(--primary)', animation: ptr.refreshing ? 'ptrSpin 0.7s linear infinite' : 'none', transform: ptr.refreshing ? 'none' : `rotate(${ptr.progress * 270}deg)` }} />
+        </div>
+      )}
       {/* ZXing Scanner Modal */}
       {scanning && (
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 1000, display: 'flex', flexDirection: 'column' }}>
@@ -221,9 +386,77 @@ export default function StockPage() {
         </div>
       )}
 
+      {/* Стандартты тізім модалы */}
+      {showSeed && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+          <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80vh', overflow: 'auto', padding: '20px 16px 32px' }}>
+            <div style={{ width: 40, height: 4, background: '#e5e7eb', borderRadius: 99, margin: '0 auto 16px' }} />
+            <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>
+              {lang === 'kz' ? '📋 Стандартты тауарлар тізімі' : '📋 Стандартный список товаров'}
+            </div>
+            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
+              {lang === 'kz'
+                ? 'Қай санаттарды қосу керек? Баға мен санын өзіңіз кейін енгізесіз.'
+                : 'Какие категории добавить? Цену и количество заполните сами позже.'}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+              <button onClick={() => setSeedCats(new Set(CATEGORIES.map(c => c.key)))} style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                {lang === 'kz' ? 'Барлығын белгілеу' : 'Выбрать все'}
+              </button>
+              <button onClick={() => setSeedCats(new Set())} style={{ fontSize: 12, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+                {lang === 'kz' ? 'Тазалау' : 'Снять все'}
+              </button>
+            </div>
+            {CATEGORIES.map(c => {
+              const count = SEED_PRODUCTS.filter(p => p.category === c.key).length
+              const checked = seedCats.has(c.key)
+              return (
+                <div key={c.key} onClick={() => {
+                  const next = new Set(seedCats)
+                  if (checked) next.delete(c.key); else next.add(c.key)
+                  setSeedCats(next)
+                }} style={{
+                  display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
+                  border: `2px solid ${checked ? 'var(--accent)' : '#e5e7eb'}`,
+                  borderRadius: 12, marginBottom: 8, cursor: 'pointer',
+                  background: checked ? '#f0faf5' : '#fff'
+                }}>
+                  <span style={{ fontSize: 26 }}>{c.icon}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14 }}>{lang === 'kz' ? c.kz : c.ru}</div>
+                    <div style={{ fontSize: 12, color: '#9ca3af' }}>{count} {lang === 'kz' ? 'тауар' : 'товаров'}</div>
+                  </div>
+                  <div style={{
+                    width: 22, height: 22, borderRadius: 6, border: `2px solid ${checked ? 'var(--accent)' : '#d1d5db'}`,
+                    background: checked ? 'var(--accent)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    {checked && <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>✓</span>}
+                  </div>
+                </div>
+              )
+            })}
+            <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+              <button className="btn btn-primary" onClick={seedProducts} disabled={seeding || seedCats.size === 0} style={{ flex: 2 }}>
+                {seeding ? (lang === 'kz' ? 'Қосылуда...' : 'Добавляется...') : `${lang === 'kz' ? 'Қосу' : 'Добавить'} (${SEED_PRODUCTS.filter(p => seedCats.has(p.category)).length})`}
+              </button>
+              <button className="btn" onClick={() => setShowSeed(false)} style={{ flex: 1 }}>
+                {lang === 'kz' ? 'Болдырмау' : 'Отмена'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
         <input placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}
           value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
+        <button onClick={() => setShowSeed(true)} style={{
+          width: 'auto', padding: '0 12px', borderRadius: 8,
+          border: '1px solid var(--accent)', background: '#f0faf5',
+          color: 'var(--accent)', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap'
+        }}>
+          📋
+        </button>
         <button className="btn btn-primary" style={{ width: 'auto', padding: '0 16px' }}
           onClick={() => {
             setShowAdd(!showAdd); setEditId(null)
@@ -234,13 +467,19 @@ export default function StockPage() {
       </div>
 
       {showAdd && (
-        <div className="card" style={{ marginBottom: 10, border: '2px solid #185FA5' }}>
+        <div className="card anim-pop-in" style={{ marginBottom: 10, border: '2px solid var(--primary)' }}>
           <div className="section-title">
             {editId ? (lang === 'kz' ? 'Өзгерту' : 'Редактировать') : (lang === 'kz' ? 'Жаңа товар' : 'Новый товар')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <input placeholder={lang === 'kz' ? 'Товар аты *' : 'Название *'}
-              value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+            <input
+              ref={nameRef}
+              placeholder={lang === 'kz' ? 'Товар аты *' : 'Название товара *'}
+              value={form.name}
+              onChange={e => setForm({ ...form, name: e.target.value })}
+              onKeyDown={e => e.key === 'Enter' && advance(costRef)}
+              autoComplete="off"
+            />
             <select value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}>
               {CATEGORIES.filter(c => c.key !== 'all').map(c => (
                 <option key={c.key} value={c.key}>{c.icon} {lang === 'kz' ? c.kz : c.ru}</option>
@@ -248,28 +487,50 @@ export default function StockPage() {
             </select>
             <div className="row-2">
               <div>
-                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>
                   {lang === 'kz' ? 'Келген баға' : 'Цена закупки'}
                 </label>
-                <input type="number" placeholder="0" value={form.cost_price}
-                  onChange={e => setForm({ ...form, cost_price: e.target.value })} />
+                <input
+                  ref={costRef}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={form.cost_price}
+                  onChange={e => setForm({ ...form, cost_price: e.target.value })}
+                  onKeyDown={e => e.key === 'Enter' && advance(priceRef)}
+                  onFocus={e => e.target.select()}
+                />
               </div>
               <div>
-                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>
                   {lang === 'kz' ? 'Сату бағасы *' : 'Цена продажи *'}
                 </label>
-                <input type="number" placeholder="0" value={form.price}
-                  onChange={e => setForm({ ...form, price: e.target.value })} />
+                <input
+                  ref={priceRef}
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="0"
+                  value={form.price}
+                  onChange={e => setForm({ ...form, price: e.target.value })}
+                  onKeyDown={e => e.key === 'Enter' && advance(qtyRef)}
+                  onFocus={e => e.target.select()}
+                />
               </div>
             </div>
             <div className="row-2">
               <div>
-                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>
                   {lang === 'kz' ? 'Саны' : 'Количество'}
                 </label>
-                <input type="number" step={form.unit === 'кг' ? '0.001' : '1'}
+                <input
+                  ref={qtyRef}
+                  type="text"
+                  inputMode={form.unit === 'кг' ? 'decimal' : 'numeric'}
                   placeholder="0" value={form.quantity}
-                  onChange={e => setForm({ ...form, quantity: e.target.value })} />
+                  onChange={e => setForm({ ...form, quantity: e.target.value })}
+                  onKeyDown={e => e.key === 'Enter' && advance(barcodeRef)}
+                  onFocus={e => e.target.select()}
+                />
               </div>
               <div>
                 <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
@@ -292,9 +553,15 @@ export default function StockPage() {
                 {lang === 'kz' ? 'Штрихкод (міндетті емес)' : 'Штрихкод (необязательно)'}
               </label>
               <div style={{ display: 'flex', gap: 6 }}>
-                <input placeholder="1234567890123" value={form.barcode}
+                <input
+                  ref={barcodeRef}
+                  placeholder="1234567890123"
+                  value={form.barcode}
+                  inputMode="numeric"
                   onChange={e => setForm({ ...form, barcode: e.target.value })}
-                  style={{ flex: 1 }} />
+                  onKeyDown={e => e.key === 'Enter' && saveProduct()}
+                  style={{ flex: 1 }}
+                />
                 <button type="button" onClick={startScanner} style={{
                   padding: '0 14px', borderRadius: 8, border: '1px solid #e5e7eb',
                   background: '#fff', cursor: 'pointer', fontSize: 20, flexShrink: 0
@@ -317,12 +584,12 @@ export default function StockPage() {
       )}
 
       {showCategoryGrid ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="stagger-list">
           {availableCats.map(c => (
-            <button key={c.key} onClick={() => setSelectedCat(c.key)} style={{
+            <button key={c.key} onClick={() => setSelectedCat(c.key)} className="pressable" style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               padding: '18px 8px', border: '2px solid var(--border)', borderRadius: 16,
-              background: '#fff', cursor: 'pointer', gap: 8,
+              background: '#fff', gap: 8,
               boxShadow: '0 2px 6px rgba(0,0,0,0.05)'
             }}>
               <span style={{ fontSize: 40 }}>{c.icon}</span>
@@ -352,10 +619,10 @@ export default function StockPage() {
           <div className="card" style={{ padding: 0 }}>
             {filtered.length === 0
               ? <p className="text-muted" style={{ textAlign: 'center', padding: 20, fontSize: 13 }}>{T.noProducts}</p>
-              : filtered.map(p => {
+              : <div key={selectedCat} className="stagger-list">{filtered.map(p => {
                 const expStatus = getExpiryStatus(p.expiry_date)
                 return (
-                  <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid #f3f4f6' }}>
+                  <div key={p.id} className="card-pressable" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
                     <div style={{ flex: 1 }}>
                       <div style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</div>
                       <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
@@ -367,10 +634,12 @@ export default function StockPage() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <span style={{
-                        fontSize: 13, fontWeight: 600, padding: '3px 8px', borderRadius: 99,
-                        background: p.quantity <= 5 ? '#FAECE7' : '#E1F5EE',
-                        color: p.quantity <= 5 ? '#712B13' : '#085041'
+                        fontSize: 13, fontWeight: 600, padding: '4px 10px', borderRadius: 99,
+                        background: p.quantity <= 5 ? 'var(--danger-light)' : 'var(--primary-light)',
+                        color: p.quantity <= 5 ? '#B91C1C' : '#15803D',
+                        display: 'flex', alignItems: 'center', gap: 4
                       }}>
+                        {p.quantity <= 5 && <span className="low-stock-dot" style={{ background: p.quantity <= 2 ? 'var(--danger)' : 'var(--warning)' }} />}
                         {p.quantity} {p.unit || 'шт'}
                       </span>
                       <span onClick={() => startEdit(p)} style={{ cursor: 'pointer', fontSize: 15 }}>✏️</span>
@@ -378,7 +647,7 @@ export default function StockPage() {
                     </div>
                   </div>
                 )
-              })
+              })}</div>
             }
           </div>
         </>
