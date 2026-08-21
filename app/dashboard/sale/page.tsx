@@ -588,10 +588,10 @@ export default function SalePage() {
                   onError={e => { const t = e.target as HTMLImageElement; t.style.display = 'none'; t.nextElementSibling && ((t.nextElementSibling as HTMLElement).style.display = 'block') }}
                 />
                 <span style={{ fontSize: 52, lineHeight: 1, display: 'none' }}>{c.icon}</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3 }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3, display: 'block' }}>
                   {lang === 'kz' ? c.kz : c.ru}
                 </span>
-                <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600, display: 'block' }}>
                   {products.filter(p => p.category === c.key).length} {lang === 'kz' ? 'дана' : 'шт'}
                 </span>
               </button>
@@ -618,10 +618,12 @@ export default function SalePage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <button onClick={() => setSelectedCat(null)} style={{
                 padding: '6px 14px', borderRadius: 99, border: '1px solid var(--border)',
-                background: '#fff', cursor: 'pointer', fontSize: 13, color: 'var(--muted)'
+                background: 'var(--card-bg)', cursor: 'pointer', fontSize: 13, color: 'var(--muted)'
               }}>← {lang === 'kz' ? 'Артқа' : 'Назад'}</button>
-              <span style={{ fontSize: 20 }}>{CATEGORIES.find(c => c.key === selectedCat)?.icon}</span>
-              <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text)' }}>
+              {(() => { const cat = CATEGORIES.find(c => c.key === selectedCat); return cat ? (
+                <img src={cat.img} alt={cat.kz} style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 8 }} />
+              ) : null })()}
+              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
                 {lang === 'kz' ? CATEGORIES.find(c => c.key === selectedCat)?.kz : CATEGORIES.find(c => c.key === selectedCat)?.ru}
               </span>
             </div>

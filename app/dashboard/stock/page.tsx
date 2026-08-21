@@ -8,17 +8,94 @@ import { usePullToRefresh } from '@/lib/usePullToRefresh'
 type Product = { id: string; name: string; price: number; cost_price?: number; quantity: number; expiry_date?: string; category?: string; unit?: string; barcode?: string }
 
 const CATEGORIES = [
-  { key: 'drinks', kz: 'Сусындар', ru: 'Напитки', icon: '🥤' },
-  { key: 'bread', kz: 'Нан өнімдері', ru: 'Хлеб', icon: '🍞' },
-  { key: 'dairy', kz: 'Сүт өнімдері', ru: 'Молочные', icon: '🥛' },
-  { key: 'sweets', kz: 'Тәттілер', ru: 'Сладости', icon: '🍫' },
-  { key: 'meat', kz: 'Ет өнімдері', ru: 'Мясо', icon: '🥩' },
-  { key: 'fruits', kz: 'Жемістер', ru: 'Фрукты', icon: '🍎' },
-  { key: 'vegetables', kz: 'Көкөністер', ru: 'Овощи', icon: '🥦' },
-  { key: 'grocery', kz: 'Бакалея', ru: 'Бакалея', icon: '🍜' },
-  { key: 'hygiene', kz: 'Тазалық', ru: 'Гигиена', icon: '🧴' },
-  { key: 'other', kz: 'Басқа', ru: 'Другое', icon: '📦' },
+  { key: 'drinks',     kz: 'Сусындар',    ru: 'Напитки',   icon: '🥤', img: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=160&h=160&fit=crop&auto=format' },
+  { key: 'bread',      kz: 'Нан өнімдері', ru: 'Хлеб',     icon: '🍞', img: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=160&h=160&fit=crop&auto=format' },
+  { key: 'dairy',      kz: 'Сүт өнімдері', ru: 'Молочные', icon: '🥛', img: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=160&h=160&fit=crop&auto=format' },
+  { key: 'sweets',     kz: 'Тәттілер',    ru: 'Сладости',  icon: '🍫', img: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=160&h=160&fit=crop&auto=format' },
+  { key: 'meat',       kz: 'Ет өнімдері', ru: 'Мясо',      icon: '🥩', img: 'https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=160&h=160&fit=crop&auto=format' },
+  { key: 'fruits',     kz: 'Жемістер',    ru: 'Фрукты',    icon: '🍎', img: 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=160&h=160&fit=crop&auto=format' },
+  { key: 'vegetables', kz: 'Көкөністер',  ru: 'Овощи',     icon: '🥦', img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=160&h=160&fit=crop&auto=format' },
+  { key: 'grocery',    kz: 'Бакалея',     ru: 'Бакалея',   icon: '🍜', img: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=160&h=160&fit=crop&auto=format' },
+  { key: 'hygiene',    kz: 'Тазалық',     ru: 'Гигиена',   icon: '🧴', img: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=160&h=160&fit=crop&auto=format' },
+  { key: 'other',      kz: 'Басқа',       ru: 'Другое',    icon: '📦', img: 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=160&h=160&fit=crop&auto=format' },
 ]
+
+// Keyword → Unsplash photo mapping for individual products
+const PRODUCT_KEYWORD_PHOTOS: [string, string][] = [
+  // Жемістер
+  ['алма',      'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=80&h=80&fit=crop&auto=format'],
+  ['банан',     'https://images.unsplash.com/photo-1528825871115-3581a5387919?w=80&h=80&fit=crop&auto=format'],
+  ['апельсин',  'https://images.unsplash.com/photo-1587393855524-087f83d95bc9?w=80&h=80&fit=crop&auto=format'],
+  ['лимон',     'https://images.unsplash.com/photo-1582348871739-a68a25bc5f5d?w=80&h=80&fit=crop&auto=format'],
+  ['мандарин',  'https://images.unsplash.com/photo-1611080626919-7cf5a9dbab12?w=80&h=80&fit=crop&auto=format'],
+  ['жүзім',     'https://images.unsplash.com/photo-1537640538966-79f369143f8f?w=80&h=80&fit=crop&auto=format'],
+  ['алмұрт',    'https://images.unsplash.com/photo-1514756331096-242fdeb70d4a?w=80&h=80&fit=crop&auto=format'],
+  ['шабдалы',   'https://images.unsplash.com/photo-1568702846914-96b305d2aaeb?w=80&h=80&fit=crop&auto=format'],
+  ['қарбыз',    'https://images.unsplash.com/photo-1563114773-84221bd62daa?w=80&h=80&fit=crop&auto=format'],
+  ['клубника',  'https://images.unsplash.com/photo-1464965911861-746a04b4bca6?w=80&h=80&fit=crop&auto=format'],
+  // Көкөністер
+  ['картоп',    'https://images.unsplash.com/photo-1518977676601-b53f82aba655?w=80&h=80&fit=crop&auto=format'],
+  ['пияз',      'https://images.unsplash.com/photo-1518977956812-cd3dbadaaf31?w=80&h=80&fit=crop&auto=format'],
+  ['сәбіз',     'https://images.unsplash.com/photo-1447175008436-054170c2e979?w=80&h=80&fit=crop&auto=format'],
+  ['қырыққабат','https://images.unsplash.com/photo-1594282486552-05b4d80fbb9f?w=80&h=80&fit=crop&auto=format'],
+  ['қияр',      'https://images.unsplash.com/photo-1449300079323-02847b0a42a3?w=80&h=80&fit=crop&auto=format'],
+  ['қызанақ',   'https://images.unsplash.com/photo-1546470427-e26264be0b0d?w=80&h=80&fit=crop&auto=format'],
+  ['сарымсақ',  'https://images.unsplash.com/photo-1615397349754-cfa2066a298e?w=80&h=80&fit=crop&auto=format'],
+  ['болгар',    'https://images.unsplash.com/photo-1563565375-f3fdfdbefa83?w=80&h=80&fit=crop&auto=format'],
+  ['баклажан',  'https://images.unsplash.com/photo-1503140234323-4df3e163571b?w=80&h=80&fit=crop&auto=format'],
+  // Нан
+  ['нан',       'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=80&h=80&fit=crop&auto=format'],
+  ['батон',     'https://images.unsplash.com/photo-1549931319-a545dcf3bc73?w=80&h=80&fit=crop&auto=format'],
+  ['лаваш',     'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=80&h=80&fit=crop&auto=format'],
+  ['печенье',   'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=80&h=80&fit=crop&auto=format'],
+  ['вафли',     'https://images.unsplash.com/photo-1558961363-fa8fdf82db35?w=80&h=80&fit=crop&auto=format'],
+  // Сүт өнімдері
+  ['сүт',       'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=80&h=80&fit=crop&auto=format'],
+  ['кефир',     'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=80&h=80&fit=crop&auto=format'],
+  ['йогурт',    'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=80&h=80&fit=crop&auto=format'],
+  ['сметана',   'https://images.unsplash.com/photo-1488477181946-6428a0291777?w=80&h=80&fit=crop&auto=format'],
+  ['сыр',       'https://images.unsplash.com/photo-1559561853-08451507e312?w=80&h=80&fit=crop&auto=format'],
+  ['масло',     'https://images.unsplash.com/photo-1587334274328-64186a80aeee?w=80&h=80&fit=crop&auto=format'],
+  // Тәттілер
+  ['шоколад',   'https://images.unsplash.com/photo-1511381939415-e44015466834?w=80&h=80&fit=crop&auto=format'],
+  ['зефир',     'https://images.unsplash.com/photo-1557925923-33b27f6de811?w=80&h=80&fit=crop&auto=format'],
+  ['халва',     'https://images.unsplash.com/photo-1558642084-fd07fae5282e?w=80&h=80&fit=crop&auto=format'],
+  // Ет
+  ['сосиска',   'https://images.unsplash.com/photo-1628196237330-42a04c74e785?w=80&h=80&fit=crop&auto=format'],
+  ['колбаса',   'https://images.unsplash.com/photo-1628196237330-42a04c74e785?w=80&h=80&fit=crop&auto=format'],
+  ['шужық',     'https://images.unsplash.com/photo-1628196237330-42a04c74e785?w=80&h=80&fit=crop&auto=format'],
+  ['тауық',     'https://images.unsplash.com/photo-1587593810167-a84920ea0781?w=80&h=80&fit=crop&auto=format'],
+  // Сусындар
+  ['кола',      'https://images.unsplash.com/photo-1554866585-cd94860890b7?w=80&h=80&fit=crop&auto=format'],
+  ['шай',       'https://images.unsplash.com/photo-1544787219-7f47ccb76574?w=80&h=80&fit=crop&auto=format'],
+  ['нескафе',   'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=80&h=80&fit=crop&auto=format'],
+  ['шырын',     'https://images.unsplash.com/photo-1621506289937-a8e4df240d0b?w=80&h=80&fit=crop&auto=format'],
+  ['айран',     'https://images.unsplash.com/photo-1563636619-e9143da7973b?w=80&h=80&fit=crop&auto=format'],
+  ['су',        'https://images.unsplash.com/photo-1548839140-29a749e1cf4d?w=80&h=80&fit=crop&auto=format'],
+  // Бакалея
+  ['күріш',     'https://images.unsplash.com/photo-1536304929831-ee1ca9d44906?w=80&h=80&fit=crop&auto=format'],
+  ['гречка',    'https://images.unsplash.com/photo-1614728263952-84ea256f9697?w=80&h=80&fit=crop&auto=format'],
+  ['макарон',   'https://images.unsplash.com/photo-1556761223-4c4282c73f77?w=80&h=80&fit=crop&auto=format'],
+  ['тұз',       'https://images.unsplash.com/photo-1600271886742-f049cd451bba?w=80&h=80&fit=crop&auto=format'],
+  ['қант',      'https://images.unsplash.com/photo-1558642084-fd07fae5282e?w=80&h=80&fit=crop&auto=format'],
+  ['ұн',        'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?w=80&h=80&fit=crop&auto=format'],
+  ['майонез',   'https://images.unsplash.com/photo-1597263705688-8be3ac57f2b0?w=80&h=80&fit=crop&auto=format'],
+  ['кетчуп',    'https://images.unsplash.com/photo-1617718262756-2cbe4e3baea6?w=80&h=80&fit=crop&auto=format'],
+  ['май',       'https://images.unsplash.com/photo-1474979266404-7eaacbcd87c5?w=80&h=80&fit=crop&auto=format'],
+  // Тазалық
+  ['сабын',     'https://images.unsplash.com/photo-1583947215259-38e31be8751f?w=80&h=80&fit=crop&auto=format'],
+  ['шампунь',   'https://images.unsplash.com/photo-1526947425960-945c6e72858f?w=80&h=80&fit=crop&auto=format'],
+  ['тіс пастасы','https://images.unsplash.com/photo-1559628129-67cf63b72248?w=80&h=80&fit=crop&auto=format'],
+  ['туалет',    'https://images.unsplash.com/photo-1584408836858-7f9d7d6e6889?w=80&h=80&fit=crop&auto=format'],
+]
+
+function getProductPhoto(name: string, catImg: string): string {
+  const n = name.toLowerCase()
+  for (const [kw, url] of PRODUCT_KEYWORD_PHOTOS) {
+    if (n.includes(kw)) return url
+  }
+  return catImg
+}
 
 const UNITS = ['шт', 'кг']
 
@@ -584,19 +661,24 @@ export default function StockPage() {
       )}
 
       {showCategoryGrid ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="stagger-list">
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }} className="stagger-list">
           {availableCats.map(c => (
             <button key={c.key} onClick={() => setSelectedCat(c.key)} className="pressable" style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-              padding: '18px 8px', border: '2px solid var(--border)', borderRadius: 16,
-              background: '#fff', gap: 8,
-              boxShadow: '0 2px 6px rgba(0,0,0,0.05)'
+              padding: '24px 12px 20px', border: '1.5px solid var(--border)', borderRadius: 20,
+              background: 'var(--card-bg)', gap: 10,
+              boxShadow: 'var(--shadow-sm)', WebkitTapHighlightColor: 'transparent',
             }}>
-              <span style={{ fontSize: 40 }}>{c.icon}</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3 }}>
+              <img
+                src={c.img} alt={c.kz}
+                style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 14, display: 'block' }}
+                onError={e => { const t = e.target as HTMLImageElement; t.style.display='none'; (t.nextSibling as HTMLElement)?.style && ((t.nextSibling as HTMLElement).style.display='block') }}
+              />
+              <span style={{ fontSize: 52, lineHeight: 1, display: 'none' }}>{c.icon}</span>
+              <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3 }}>
                 {lang === 'kz' ? c.kz : c.ru}
               </span>
-              <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 500 }}>
+              <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
                 {catCounts[c.key]} {lang === 'kz' ? 'дана' : 'шт'}
               </span>
             </button>
@@ -608,10 +690,12 @@ export default function StockPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
               <button onClick={() => setSelectedCat(null)} style={{
                 padding: '6px 14px', borderRadius: 99, border: '1px solid var(--border)',
-                background: '#fff', cursor: 'pointer', fontSize: 13, color: 'var(--muted)'
+                background: 'var(--card-bg)', cursor: 'pointer', fontSize: 13, color: 'var(--muted)'
               }}>← {lang === 'kz' ? 'Артқа' : 'Назад'}</button>
-              <span style={{ fontSize: 20 }}>{CATEGORIES.find(c => c.key === selectedCat)?.icon}</span>
-              <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--text)' }}>
+              {(() => { const cat = CATEGORIES.find(c => c.key === selectedCat); return cat ? (
+                <img src={cat.img} alt={cat.kz} style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 8 }} />
+              ) : null })()}
+              <span style={{ fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
                 {lang === 'kz' ? CATEGORIES.find(c => c.key === selectedCat)?.kz : CATEGORIES.find(c => c.key === selectedCat)?.ru}
               </span>
             </div>
@@ -621,22 +705,30 @@ export default function StockPage() {
               ? <p className="text-muted" style={{ textAlign: 'center', padding: 20, fontSize: 13 }}>{T.noProducts}</p>
               : <div key={selectedCat} className="stagger-list">{filtered.map(p => {
                 const expStatus = getExpiryStatus(p.expiry_date)
+                const catImg = CATEGORIES.find(c => c.key === p.category)?.img || CATEGORIES[9].img
+                const productPhoto = getProductPhoto(p.name, catImg)
                 return (
-                  <div key={p.id} className="card-pressable" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 14px', borderBottom: '1px solid var(--border)' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 14, fontWeight: 500 }}>{p.name}</div>
-                      <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>
+                  <div key={p.id} className="card-pressable" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid var(--border)', gap: 10 }}>
+                    {/* Product photo */}
+                    <img
+                      src={productPhoto} alt={p.name}
+                      style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 10, flexShrink: 0 }}
+                      onError={e => { (e.target as HTMLImageElement).style.opacity = '0' }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
                         {p.price.toLocaleString()} ₸/{p.unit || 'шт'}
-                        {p.barcode && <span style={{ marginLeft: 6, color: '#9ca3af' }}>#{p.barcode}</span>}
-                        {expStatus === 'expired' && <span style={{ color: '#D85A30', marginLeft: 6 }}>❌ мерзімі өтті</span>}
-                        {expStatus === 'soon' && <span style={{ color: '#D97706', marginLeft: 6 }}>⚠️ {p.expiry_date}</span>}
+                        {p.barcode && <span style={{ marginLeft: 6 }}>#{p.barcode}</span>}
+                        {expStatus === 'expired' && <span style={{ color: 'var(--danger)', marginLeft: 6 }}>❌ мерзімі өтті</span>}
+                        {expStatus === 'soon' && <span style={{ color: 'var(--warning)', marginLeft: 6 }}>⚠️ {p.expiry_date}</span>}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                       <span style={{
                         fontSize: 13, fontWeight: 600, padding: '4px 10px', borderRadius: 99,
                         background: p.quantity <= 5 ? 'var(--danger-light)' : 'var(--primary-light)',
-                        color: p.quantity <= 5 ? '#B91C1C' : '#15803D',
+                        color: p.quantity <= 5 ? 'var(--danger)' : 'var(--primary-dark)',
                         display: 'flex', alignItems: 'center', gap: 4
                       }}>
                         {p.quantity <= 5 && <span className="low-stock-dot" style={{ background: p.quantity <= 2 ? 'var(--danger)' : 'var(--warning)' }} />}
