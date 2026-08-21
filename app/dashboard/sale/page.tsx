@@ -402,7 +402,7 @@ export default function SalePage() {
           pointerEvents: 'none',
         }}>
           <div className={successFading ? 'anim-success-card-out' : 'anim-success-card-in'} style={{
-            background: '#fff',
+            background: 'var(--card-bg)',
             borderRadius: 28,
             padding: '32px 52px',
             display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
@@ -554,42 +554,58 @@ export default function SalePage() {
         />
         <button onClick={startScanner} style={{
           padding: '0 14px', borderRadius: 8, border: '1px solid var(--border)',
-          background: '#fff', cursor: 'pointer', fontSize: 22, flexShrink: 0
+          background: 'var(--card-bg)', cursor: 'pointer', fontSize: 22, flexShrink: 0
         }}>📷</button>
       </div>
 
       {showCategoryGrid ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="stagger-list">
-          {availableCats.map(c => (
-            <button key={c.key}
-              onClick={() => setSelectedCat(c.key)}
-              onPointerDown={() => setPressedId('cat-' + c.key)}
-              onPointerUp={() => setPressedId(null)}
-              onPointerLeave={() => setPressedId(null)}
-              style={{
-                display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                padding: '18px 8px', border: '2px solid var(--border)', borderRadius: 16,
-                background: '#fff', gap: 8, cursor: 'pointer',
-                WebkitTapHighlightColor: 'transparent',
-                boxShadow: pressedId === 'cat-' + c.key
-                  ? '0 1px 3px rgba(0,0,0,0.10)'
-                  : '0 4px 12px rgba(0,0,0,0.07)',
-                transform: pressedId === 'cat-' + c.key
-                  ? 'perspective(400px) rotateX(10deg) scale(0.95) translateY(3px)'
-                  : 'perspective(400px) rotateX(0deg) scale(1) translateY(0)',
-                transition: 'transform 140ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease-out',
-                transformStyle: 'preserve-3d',
-              }}>
-              <span style={{ fontSize: 40 }}>{c.icon}</span>
-              <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3 }}>
-                {lang === 'kz' ? c.kz : c.ru}
-              </span>
-              <span style={{ fontSize: 11, color: 'var(--accent)', fontWeight: 500 }}>
-                {products.filter(p => p.category === c.key).length} {lang === 'kz' ? 'дана' : 'шт'}
-              </span>
-            </button>
-          ))}
-        </div>
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }} className="stagger-list">
+            {availableCats.map(c => (
+              <button key={c.key}
+                onClick={() => setSelectedCat(c.key)}
+                onPointerDown={() => setPressedId('cat-' + c.key)}
+                onPointerUp={() => setPressedId(null)}
+                onPointerLeave={() => setPressedId(null)}
+                style={{
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                  padding: '24px 12px 20px', border: '1.5px solid var(--border)', borderRadius: 20,
+                  background: 'var(--card-bg)', gap: 10, cursor: 'pointer',
+                  WebkitTapHighlightColor: 'transparent',
+                  boxShadow: pressedId === 'cat-' + c.key
+                    ? '0 1px 3px rgba(0,0,0,0.10)'
+                    : 'var(--shadow-sm)',
+                  transform: pressedId === 'cat-' + c.key
+                    ? 'perspective(400px) rotateX(10deg) scale(0.95) translateY(3px)'
+                    : 'perspective(400px) rotateX(0deg) scale(1) translateY(0)',
+                  transition: 'transform 140ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease-out',
+                  transformStyle: 'preserve-3d',
+                }}>
+                <span style={{ fontSize: 52, lineHeight: 1 }}>{c.icon}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3 }}>
+                  {lang === 'kz' ? c.kz : c.ru}
+                </span>
+                <span style={{ fontSize: 12, color: 'var(--accent)', fontWeight: 600 }}>
+                  {products.filter(p => p.category === c.key).length} {lang === 'kz' ? 'дана' : 'шт'}
+                </span>
+              </button>
+            ))}
+          </div>
+          {/* Big scanner button */}
+          <button onClick={startScanner} style={{
+            width: '100%', padding: '17px', borderRadius: 18, border: 'none',
+            background: 'var(--primary)', color: '#fff',
+            fontSize: 17, fontWeight: 700, cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+            boxShadow: '0 4px 18px rgba(22,163,74,0.32)',
+            WebkitTapHighlightColor: 'transparent',
+            marginBottom: 12,
+            transition: 'transform 0.12s cubic-bezier(0.34,1.56,0.64,1)',
+          }}>
+            <span style={{ fontSize: 22 }}>⬛</span>
+            {lang === 'kz' ? 'Сканерлеу' : 'Сканировать'}
+          </button>
+        </>
       ) : (
         <>
           {selectedCat !== null && (
@@ -613,7 +629,7 @@ export default function SalePage() {
                 onPointerLeave={() => setPressedId(null)}
                 style={{
                   position: 'relative', overflow: 'hidden',
-                  background: '#fff', border: '1px solid var(--border)', borderRadius: 12,
+                  background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 12,
                   padding: '12px', userSelect: 'none', cursor: 'pointer',
                   WebkitTapHighlightColor: 'transparent',
                   boxShadow: pressedId === 'prod-' + p.id
@@ -695,7 +711,7 @@ export default function SalePage() {
               <button key={pt} onClick={() => setPayType(pt)} style={{
                 padding: '13px 8px', borderRadius: 12, cursor: 'pointer',
                 border: `2px solid ${payType === pt ? 'var(--primary)' : 'var(--border)'}`,
-                background: payType === pt ? 'var(--primary-light)' : '#fff',
+                background: payType === pt ? 'var(--primary-light)' : 'var(--card-bg)',
                 color: payType === pt ? 'var(--primary-dark)' : 'var(--muted)',
                 fontWeight: payType === pt ? 700 : 500, fontSize: 15,
                 transition: 'all 0.15s', WebkitTapHighlightColor: 'transparent',

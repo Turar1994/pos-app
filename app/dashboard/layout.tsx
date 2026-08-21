@@ -11,12 +11,23 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const router = useRouter()
   const pathname = usePathname()
   const [lang, setLang] = useState<Lang>('kz')
+  const [theme, setThemeState] = useState<'light' | 'dark'>('light')
   const [store, setStore] = useState<Store | null>(null)
   const [loading, setLoading] = useState(true)
   const [storeName, setStoreName] = useState('')
   const [refresh, setRefresh] = useState(0)
   const T = t[lang]
   const [blocked, setBlocked] = useState<string | null>(null)
+
+  useEffect(() => {
+    const saved = localStorage.getItem('theme') as 'light' | 'dark' | null
+    if (saved) setThemeState(saved)
+  }, [])
+
+  function setTheme(t: 'light' | 'dark') {
+    setThemeState(t)
+    localStorage.setItem('theme', t)
+  }
 
   useEffect(() => { loadStore() }, [])
   useEffect(() => {
@@ -141,12 +152,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   ]
 
   return (
-    <AppContext.Provider value={{ store, lang, setLang, refresh, triggerRefresh: () => setRefresh(r => r + 1) }}>
-      <div style={{ paddingBottom: 74 }}>
+    <AppContext.Provider value={{ store, lang, setLang, theme, setTheme, refresh, triggerRefresh: () => setRefresh(r => r + 1) }}>
+      <div data-theme={theme} style={{ paddingBottom: 74, minHeight: '100vh', background: 'var(--bg)' }}>
         {/* Header */}
-        <div style={{
-          background: '#fff',
-          borderBottom: '1px solid var(--border)',
+        <div className="app-header" style={{
           padding: '12px 16px',
           display: 'flex',
           justifyContent: 'space-between',
@@ -172,7 +181,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
               {(['kz', 'ru'] as Lang[]).map(l => (
                 <button key={l} onClick={() => setLang(l)} style={{
                   padding: '5px 10px', borderRadius: 8, border: 'none',
-                  background: lang === l ? '#fff' : 'transparent',
+                  background: lang === l ? 'var(--card-bg)' : 'transparent',
                   color: lang === l ? 'var(--text)' : 'var(--muted)',
                   fontWeight: lang === l ? 700 : 500,
                   cursor: 'pointer', fontSize: 12,
@@ -181,6 +190,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 }}>{l === 'kz' ? 'ҚАЗ' : 'РУС'}</button>
               ))}
             </div>
+            {/* Theme toggle */}
+            <button onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} style={{
+              width: 34, height: 34, borderRadius: 10, border: '1px solid var(--border)',
+              background: 'var(--surface)', cursor: 'pointer', fontSize: 17,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              WebkitTapHighlightColor: 'transparent', transition: 'all 0.15s',
+              flexShrink: 0,
+            }}>
+              {theme === 'dark' ? '☀️' : '🌙'}
+            </button>
             <button onClick={logout} style={{
               fontSize: 12, padding: '6px 12px', borderRadius: 8,
               border: '1px solid var(--border)', background: 'transparent',
@@ -195,10 +214,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Bottom Nav */}
-        <nav style={{
+        <nav className="app-nav" style={{
           position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
-          width: '100%', maxWidth: 430, background: '#fff',
-          borderTop: '1px solid var(--border)', display: 'flex',
+          width: '100%', maxWidth: 430, display: 'flex',
           boxShadow: '0 -4px 20px rgba(15,23,42,0.08)'
         }}>
           {tabs.map(tab => {

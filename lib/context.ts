@@ -7,6 +7,8 @@ export type AppCtx = {
   store: Store
   lang: Lang
   setLang: (l: Lang) => void
+  theme: 'light' | 'dark'
+  setTheme: (t: 'light' | 'dark') => void
   refresh: number
   triggerRefresh: () => void
 }
