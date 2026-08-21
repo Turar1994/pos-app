@@ -17,6 +17,11 @@ type PaidDebt = {
   quantity: number; paid_at: string; created_at: string; debtor_phone?: string
 }
 type Period = 'today' | 'week' | 'month'
+type StagnantProduct = {
+  id: string; name: string; price: number; quantity: number
+  unit?: string; category?: string
+  lastSale: string | null; daysSince: number | null
+}
 
 export default function ReportPage() {
   const { store, lang, refresh } = useApp()
@@ -28,6 +33,9 @@ export default function ReportPage() {
   const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState<Period>('today')
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [showStagnant, setShowStagnant] = useState(false)
+  const [stagnantProducts, setStagnantProducts] = useState<StagnantProduct[]>([])
+  const [stagnantLoading, setStagnantLoading] = useState(false)
 
   const ptr = usePullToRefresh(useCallback(() => loadData(), [store.id, period]))
 
@@ -80,6 +88,46 @@ export default function ReportPage() {
     setLoading(false)
   }
 
+  async function loadStagnantProducts() {
+    setStagnantLoading(true)
+    const supabase = createClient()
+    const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30)
+
+    const [productsRes, salesRes] = await Promise.all([
+      supabase.from('products').select('*').eq('store_id', store.id).gt('quantity', 0),
+      supabase.from('sales').select('product_id, created_at').eq('store_id', store.id),
+    ])
+
+    // Build last sale date per product
+    const lastSaleMap: Record<string, string> = {}
+    salesRes.data?.forEach((s: any) => {
+      if (s.product_id && (!lastSaleMap[s.product_id] || s.created_at > lastSaleMap[s.product_id])) {
+        lastSaleMap[s.product_id] = s.created_at
+      }
+    })
+
+    const stagnant = (productsRes.data || [])
+      .filter((p: any) => {
+        const last = lastSaleMap[p.id]
+        if (!last) return true
+        return new Date(last) < monthAgo
+      })
+      .map((p: any) => {
+        const last = lastSaleMap[p.id] || null
+        const daysSince = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86400000) : null
+        return { ...p, lastSale: last, daysSince }
+      })
+      .sort((a: StagnantProduct, b: StagnantProduct) => {
+        if (a.daysSince === null && b.daysSince === null) return 0
+        if (a.daysSince === null) return -1
+        if (b.daysSince === null) return 1
+        return b.daysSince - a.daysSince
+      })
+
+    setStagnantProducts(stagnant)
+    setStagnantLoading(false)
+  }
+
   const cashTotal = receipts.filter(r => r.payment_type === 'cash').reduce((s, r) => s + r.total_amount, 0)
   const kaspiTotal = receipts.filter(r => r.payment_type === 'kaspi').reduce((s, r) => s + r.total_amount, 0)
   const paidDebtTotal = paidDebts.reduce((s, d) => s + d.amount, 0)
@@ -99,6 +147,98 @@ export default function ReportPage() {
 
   const medals = ['🥇', '🥈', '🥉']
 
+  // ── Stagnant products view ──────────────────────────────
+  if (showStagnant) {
+    const CAT_LABELS: Record<string, { kz: string; ru: string }> = {
+      drinks: { kz: 'Сусындар', ru: 'Напитки' }, bread: { kz: 'Нан', ru: 'Хлеб' },
+      dairy: { kz: 'Сүт', ru: 'Молочные' }, sweets: { kz: 'Тәттілер', ru: 'Сладости' },
+      meat: { kz: 'Ет', ru: 'Мясо' }, fruits: { kz: 'Жемістер', ru: 'Фрукты' },
+      vegetables: { kz: 'Көкөністер', ru: 'Овощи' }, grocery: { kz: 'Бакалея', ru: 'Бакалея' },
+      hygiene: { kz: 'Тазалық', ru: 'Гигиена' }, other: { kz: 'Басқа', ru: 'Другое' },
+    }
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <button onClick={() => setShowStagnant(false)} style={{
+            padding: '7px 16px', borderRadius: 99, border: '1px solid var(--border)',
+            background: 'var(--card-bg)', cursor: 'pointer', fontSize: 13, color: 'var(--muted)',
+          }}>← {lang === 'kz' ? 'Артқа' : 'Назад'}</button>
+          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>
+            🧊 {lang === 'kz' ? 'Тұрып қалған тауарлар' : 'Стоячие товары'}
+          </span>
+        </div>
+
+        {stagnantLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 72, borderRadius: 14 }} />)}
+          </div>
+        ) : stagnantProducts.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+            <div style={{ fontSize: 52, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
+              {lang === 'kz' ? 'Тұрып қалған тауар жоқ!' : 'Нет стоячих товаров!'}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--muted)' }}>
+              {lang === 'kz' ? 'Барлық тауарлар соңғы 30 күнде сатылды' : 'Все товары продавались за последние 30 дней'}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)', borderRadius: 12, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: lang === 'kz' ? '#92400E' : '#92400E' }}>
+              <span style={{ fontWeight: 700 }}>⚠️ {stagnantProducts.length} {lang === 'kz' ? 'тауар' : 'товаров'}</span>
+              {' '}{lang === 'kz' ? '— 1 айдан астам сатылмады. Алып тастауды немесе жаңа партия алмауды қараңыз.' : '— не продавались более 1 месяца. Рассмотрите вывод из ассортимента.'}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {stagnantProducts.map(p => {
+                const daysText = p.daysSince === null
+                  ? (lang === 'kz' ? 'Ешқашан сатылмаған' : 'Никогда не продавался')
+                  : `${p.daysSince} ${lang === 'kz' ? 'күн' : 'дн.'}`
+                const urgency = p.daysSince === null || p.daysSince >= 90 ? 'high' : p.daysSince >= 60 ? 'mid' : 'low'
+                const borderColor = urgency === 'high' ? 'var(--danger)' : urgency === 'mid' ? 'var(--warning)' : '#94A3B8'
+                const badgeBg = urgency === 'high' ? 'var(--danger-light)' : urgency === 'mid' ? 'rgba(245,158,11,0.12)' : 'var(--surface)'
+                const badgeColor = urgency === 'high' ? 'var(--danger)' : urgency === 'mid' ? '#D97706' : 'var(--muted)'
+                const cat = p.category ? CAT_LABELS[p.category] : null
+                return (
+                  <div key={p.id} style={{
+                    background: 'var(--card-bg)', borderRadius: 14, padding: '12px 14px',
+                    border: '1px solid var(--border)', borderLeft: `4px solid ${borderColor}`,
+                    display: 'flex', alignItems: 'center', gap: 12,
+                    boxShadow: 'var(--shadow-sm)',
+                  }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {p.name}
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <span>{p.price.toLocaleString()} ₸</span>
+                        <span>·</span>
+                        <span>{lang === 'kz' ? 'Қалдық:' : 'Остаток:'} {p.quantity} {p.unit || 'шт'}</span>
+                        {cat && <><span>·</span><span>{lang === 'kz' ? cat.kz : cat.ru}</span></>}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                      <div style={{
+                        fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 99,
+                        background: badgeBg, color: badgeColor, whiteSpace: 'nowrap',
+                      }}>
+                        {daysText}
+                      </div>
+                      {p.lastSale && (
+                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
+                          {lang === 'kz' ? 'Соңғы:' : 'Посл:'} {fmtDate(p.lastSale)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div>
       {(ptr.progress > 0 || ptr.refreshing) && (
@@ -111,7 +251,7 @@ export default function ReportPage() {
           <button key={p.key} onClick={() => setPeriod(p.key as Period)} style={{
             flex: 1, padding: '10px 4px', borderRadius: 10,
             border: `2px solid ${period === p.key ? 'var(--primary)' : 'var(--border)'}`,
-            background: period === p.key ? 'var(--primary-light)' : '#fff',
+            background: period === p.key ? 'var(--primary-light)' : 'var(--card-bg)',
             color: period === p.key ? 'var(--primary-dark)' : 'var(--muted)',
             fontWeight: period === p.key ? 700 : 500, cursor: 'pointer', fontSize: 13,
             transition: 'all 0.15s', WebkitTapHighlightColor: 'transparent',
@@ -154,7 +294,7 @@ export default function ReportPage() {
               { label: `✅ ${lang === 'kz' ? 'Өтелген қарыз' : 'Долги оплачены'}`, value: displayPaidDebt, color: 'var(--primary)' },
               { label: `💳 ${lang === 'kz' ? 'Өтелмеген қарыз' : 'Долг (не оплачено)'}`, value: displayUnpaid, color: 'var(--danger)' },
             ].map((s, i) => (
-              <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '14px', border: '1px solid var(--border)', boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }}>
+              <div key={i} style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '14px', border: '1px solid var(--border)', boxShadow: '0 1px 4px rgba(15,23,42,0.05)' }}>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 6, fontWeight: 500 }}>{s.label}</div>
                 <div style={{ fontSize: 18, fontWeight: 800, color: s.color, letterSpacing: -0.5 }}>{s.value.toLocaleString()} ₸</div>
               </div>
@@ -177,7 +317,29 @@ export default function ReportPage() {
             </div>
           )}
 
-          <div style={{ background: '#fff', borderRadius: 20, padding: '16px 18px', marginBottom: 12, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
+          {/* Stagnant products button */}
+          <button onClick={() => { setShowStagnant(true); loadStagnantProducts() }} style={{
+            width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+            padding: '16px 18px', marginBottom: 12,
+            background: 'var(--card-bg)', border: '1.5px solid var(--border)',
+            borderRadius: 16, cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+            boxShadow: 'var(--shadow-sm)', transition: 'transform 0.12s',
+          }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(245,158,11,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+              🧊
+            </div>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>
+                {lang === 'kz' ? 'Тұрып қалған тауарлар' : 'Стоячие товары'}
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
+                {lang === 'kz' ? '1 айдан астам сатылмаған товарлар' : 'Товары без продаж более 1 месяца'}
+              </div>
+            </div>
+            <span style={{ color: 'var(--muted)', fontSize: 18 }}>›</span>
+          </button>
+
+          <div style={{ background: 'var(--card-bg)', borderRadius: 20, padding: '16px 18px', marginBottom: 12, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
             <div className="section-title">{lang === 'kz' ? 'Транзакциялар' : 'Транзакции'}</div>
             {receipts.length === 0 && paidDebts.length === 0
               ? <p style={{ textAlign: 'center', padding: '20px 0', fontSize: 14, color: 'var(--muted)' }}>{T.noData}</p>
