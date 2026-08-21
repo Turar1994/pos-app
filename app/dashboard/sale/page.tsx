@@ -10,16 +10,16 @@ type Product = { id: string; name: string; price: number; quantity: number; unit
 type CartItem = { product: Product; qty: number; amount: number }
 
 const CATEGORIES = [
-  { key: 'drinks', kz: 'Сусындар', ru: 'Напитки', icon: '🥤' },
-  { key: 'bread', kz: 'Нан', ru: 'Хлеб', icon: '🍞' },
-  { key: 'dairy', kz: 'Сүт', ru: 'Молочные', icon: '🥛' },
-  { key: 'sweets', kz: 'Тәттілер', ru: 'Сладости', icon: '🍫' },
-  { key: 'meat', kz: 'Ет', ru: 'Мясо', icon: '🥩' },
-  { key: 'fruits', kz: 'Жемістер', ru: 'Фрукты', icon: '🍎' },
-  { key: 'vegetables', kz: 'Көкөністер', ru: 'Овощи', icon: '🥦' },
-  { key: 'grocery', kz: 'Бакалея', ru: 'Бакалея', icon: '🍜' },
-  { key: 'hygiene', kz: 'Тазалық', ru: 'Гигиена', icon: '🧴' },
-  { key: 'other', kz: 'Басқа', ru: 'Другое', icon: '📦' },
+  { key: 'drinks',     kz: 'Сусындар',  ru: 'Напитки',   icon: '🥤', img: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=160&h=160&fit=crop&auto=format' },
+  { key: 'bread',      kz: 'Нан',       ru: 'Хлеб',      icon: '🍞', img: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=160&h=160&fit=crop&auto=format' },
+  { key: 'dairy',      kz: 'Сүт',       ru: 'Молочные',  icon: '🥛', img: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=160&h=160&fit=crop&auto=format' },
+  { key: 'sweets',     kz: 'Тәттілер', ru: 'Сладости',  icon: '🍫', img: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=160&h=160&fit=crop&auto=format' },
+  { key: 'meat',       kz: 'Ет',        ru: 'Мясо',      icon: '🥩', img: 'https://images.unsplash.com/photo-1607623814075-e51df1bdc82f?w=160&h=160&fit=crop&auto=format' },
+  { key: 'fruits',     kz: 'Жемістер', ru: 'Фрукты',    icon: '🍎', img: 'https://images.unsplash.com/photo-1619566636858-adf3ef46400b?w=160&h=160&fit=crop&auto=format' },
+  { key: 'vegetables', kz: 'Көкөністер', ru: 'Овощи',   icon: '🥦', img: 'https://images.unsplash.com/photo-1540420773420-3366772f4999?w=160&h=160&fit=crop&auto=format' },
+  { key: 'grocery',    kz: 'Бакалея',   ru: 'Бакалея',  icon: '🍜', img: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=160&h=160&fit=crop&auto=format' },
+  { key: 'hygiene',    kz: 'Тазалық',  ru: 'Гигиена',   icon: '🧴', img: 'https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?w=160&h=160&fit=crop&auto=format' },
+  { key: 'other',      kz: 'Басқа',     ru: 'Другое',    icon: '📦', img: 'https://images.unsplash.com/photo-1491553895911-0055eca6402d?w=160&h=160&fit=crop&auto=format' },
 ]
 
 export default function SalePage() {
@@ -581,7 +581,13 @@ export default function SalePage() {
                   transition: 'transform 140ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease-out',
                   transformStyle: 'preserve-3d',
                 }}>
-                <span style={{ fontSize: 52, lineHeight: 1 }}>{c.icon}</span>
+                <img
+                  src={c.img}
+                  alt={c.kz}
+                  style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 14, display: 'block' }}
+                  onError={e => { const t = e.target as HTMLImageElement; t.style.display = 'none'; t.nextElementSibling && ((t.nextElementSibling as HTMLElement).style.display = 'block') }}
+                />
+                <span style={{ fontSize: 52, lineHeight: 1, display: 'none' }}>{c.icon}</span>
                 <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', textAlign: 'center', lineHeight: 1.3 }}>
                   {lang === 'kz' ? c.kz : c.ru}
                 </span>
