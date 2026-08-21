@@ -640,7 +640,7 @@ export default function StockPage() {
                   style={{ flex: 1 }}
                 />
                 <button type="button" onClick={startScanner} style={{
-                  padding: '0 14px', borderRadius: 8, border: '1px solid #e5e7eb',
+                  padding: '0 14px', borderRadius: 8, border: '1px solid var(--border)',
                   background: 'var(--card-bg)', cursor: 'pointer', fontSize: 20, flexShrink: 0
                 }}>📷</button>
               </div>

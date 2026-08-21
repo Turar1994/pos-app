@@ -59,6 +59,11 @@
 
 /* ===================== DARK THEME ===================== */
 
+[data-theme="dark"],
+[data-theme="light"] {
+  color: var(--text);
+}
+
 [data-theme="dark"] {
   --primary: #22C55E;
   --primary-light: rgba(34, 197, 94, 0.14);

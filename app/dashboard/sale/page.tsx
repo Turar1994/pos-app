@@ -652,7 +652,7 @@ export default function SalePage() {
                 {ripples.filter(r => r.productId === p.id).map(r => (
                   <span key={r.id} className="ripple-wave" style={{ left: r.x, top: r.y }} />
                 ))}
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 5 }}>{p.name}</div>
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 5, color: 'var(--text)' }}>{p.name}</div>
                 <div style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>{p.price.toLocaleString()} ₸</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>/{p.unit || 'шт'}</div>
                 <div style={{ fontSize: 11, marginTop: 4, display: 'flex', alignItems: 'center' }}>
@@ -697,7 +697,7 @@ export default function SalePage() {
               {item.product.unit === 'кг' ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                   <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--primary)' }}>{item.amount.toLocaleString()} ₸</span>
-                  <button onClick={() => removeFromCart(item.product.id)} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'var(--danger-light)', color: '#B91C1C', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                  <button onClick={() => removeFromCart(item.product.id)} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'var(--danger-light)', color: 'var(--danger)', cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                 </div>
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
@@ -705,7 +705,7 @@ export default function SalePage() {
                   <span style={{ minWidth: 28, textAlign: 'center', fontSize: 15, fontWeight: 700 }}>{item.qty}</span>
                   <button onClick={() => updateQty(item.product.id, 1)} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'var(--primary-light)', color: 'var(--primary-dark)', cursor: 'pointer', fontSize: 18, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent' }}>+</button>
                   <span style={{ fontWeight: 700, fontSize: 14, minWidth: 52, textAlign: 'right', color: 'var(--primary)' }}>{item.amount.toLocaleString()} ₸</span>
-                  <button onClick={() => removeFromCart(item.product.id)} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'var(--danger-light)', color: '#B91C1C', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent' }}>✕</button>
+                  <button onClick={() => removeFromCart(item.product.id)} style={{ width: 36, height: 36, borderRadius: 8, border: 'none', background: 'var(--danger-light)', color: 'var(--danger)', cursor: 'pointer', fontSize: 15, display: 'flex', alignItems: 'center', justifyContent: 'center', WebkitTapHighlightColor: 'transparent' }}>✕</button>
                 </div>
               )}
             </div>
@@ -732,7 +732,7 @@ export default function SalePage() {
             <button className="btn btn-success pressable" onClick={() => handleSale(false)} disabled={loading}>
               {loading ? T.loading : (lang === 'kz' ? '✓ Сату' : '✓ Продать')}
             </button>
-            <button className="btn pressable" onClick={() => setShowDebtForm(!showDebtForm)} style={{ borderColor: '#D97706', color: '#D97706' }}>
+            <button className="btn pressable" onClick={() => setShowDebtForm(!showDebtForm)} style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}>
               💳 {lang === 'kz' ? 'Қарызға' : 'В долг'}
             </button>
           </div>
@@ -742,7 +742,7 @@ export default function SalePage() {
               <input placeholder={lang === 'kz' ? 'Телефон' : 'Телефон'} value={debtorPhone} onChange={e => setDebtorPhone(e.target.value)} />
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
               <button className="btn" onClick={() => handleSale(true)} disabled={loading}
-                style={{ background: '#D97706', color: '#fff', borderColor: '#D97706' }}>
+                style={{ background: 'var(--warning)', color: '#fff', borderColor: 'var(--warning)' }}>
                 {loading ? T.loading : (lang === 'kz' ? 'Қарызға беру' : 'Выдать в долг')}
               </button>
             </div>

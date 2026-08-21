@@ -184,7 +184,7 @@ export default function ReportPage() {
           </div>
         ) : (
           <>
-            <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)', borderRadius: 12, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: lang === 'kz' ? '#92400E' : '#92400E' }}>
+            <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)', borderRadius: 12, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: 'var(--warning)' }}>
               <span style={{ fontWeight: 700 }}>⚠️ {stagnantProducts.length} {lang === 'kz' ? 'тауар' : 'товаров'}</span>
               {' '}{lang === 'kz' ? '— 1 айдан астам сатылмады. Алып тастауды немесе жаңа партия алмауды қараңыз.' : '— не продавались более 1 месяца. Рассмотрите вывод из ассортимента.'}
             </div>
