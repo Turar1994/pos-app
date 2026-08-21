@@ -95,7 +95,7 @@ export default function DebtsPage() {
         </div>
         <div className="stat-card">
           <div className="stat-label">{lang === 'kz' ? 'Мерзімі өткен' : 'Просрочено'}</div>
-          <div className="stat-value" style={{ color: overdueList.length > 0 ? '#D85A30' : '#0F6E56' }}>
+          <div className="stat-value" style={{ color: overdueList.length > 0 ? 'var(--danger)' : 'var(--primary)' }}>
             {overdueList.length}
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function DebtsPage() {
           <button key={f.key} onClick={() => setFilter(f.key as any)} style={{
             padding: '8px 16px', borderRadius: 10,
             border: `2px solid ${filter === f.key ? 'var(--primary)' : 'var(--border)'}`,
-            background: filter === f.key ? 'var(--primary-light)' : '#fff',
+            background: filter === f.key ? 'var(--primary-light)' : 'var(--card-bg)',
             color: filter === f.key ? 'var(--primary-dark)' : 'var(--muted)',
             fontWeight: filter === f.key ? 700 : 500,
             cursor: 'pointer', fontSize: 13, transition: 'all 0.15s',
@@ -142,7 +142,7 @@ export default function DebtsPage() {
         return (
           <div key={d.id} className={overdue ? 'pulse-danger' : ''} style={{
             position: 'relative', overflow: 'hidden',
-            background: '#fff', borderRadius: 18, padding: '16px', marginBottom: 10,
+            background: 'var(--card-bg)', borderRadius: 18, padding: '16px', marginBottom: 10,
             border: '1px solid var(--border)',
             borderLeft: `4px solid ${borderColor}`,
             boxShadow: '0 2px 8px rgba(15,23,42,0.06)',
@@ -165,10 +165,10 @@ export default function DebtsPage() {
                   {d.is_paid
                     ? <span className="badge" style={{ background: 'var(--primary-light)', color: 'var(--primary-dark)' }}>✅ {lang === 'kz' ? 'Төленді' : 'Оплачено'}</span>
                     : overdue
-                      ? <span className="badge anim-breathe" style={{ background: 'var(--danger-light)', color: '#B91C1C' }}>🔴 {lang === 'kz' ? 'Мерзімі өтті' : 'Просрочено'}</span>
+                      ? <span className="badge anim-breathe" style={{ background: 'var(--danger-light)', color: 'var(--danger)' }}>🔴 {lang === 'kz' ? 'Мерзімі өтті' : 'Просрочено'}</span>
                       : dueSoon
-                        ? <span className="badge" style={{ background: 'var(--warning-light)', color: '#92400E' }}>⚠️ {lang === 'kz' ? 'Жақында' : 'Скоро'}</span>
-                        : <span className="badge" style={{ background: 'var(--blue-light)', color: '#1D4ED8' }}>💳 {lang === 'kz' ? 'Қарыз' : 'Долг'}</span>
+                        ? <span className="badge" style={{ background: 'var(--warning-light)', color: 'var(--warning)' }}>⚠️ {lang === 'kz' ? 'Жақында' : 'Скоро'}</span>
+                        : <span className="badge" style={{ background: 'var(--blue-light)', color: 'var(--blue)' }}>💳 {lang === 'kz' ? 'Қарыз' : 'Долг'}</span>
                   }
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--muted)', display: 'flex', gap: 10, flexWrap: 'wrap', lineHeight: 1.8 }}>

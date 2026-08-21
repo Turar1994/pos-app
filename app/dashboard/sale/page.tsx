@@ -737,7 +737,7 @@ export default function SalePage() {
             </button>
           </div>
           {showDebtForm && (
-            <div style={{ background: '#FEF3C7', borderRadius: 8, padding: 12, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ background: 'var(--surface)', borderRadius: 8, padding: 12, marginTop: 8, display: 'flex', flexDirection: 'column', gap: 8 }}>
               <input placeholder={lang === 'kz' ? 'Аты-жөні *' : 'Имя должника *'} value={debtorName} onChange={e => setDebtorName(e.target.value)} />
               <input placeholder={lang === 'kz' ? 'Телефон' : 'Телефон'} value={debtorPhone} onChange={e => setDebtorPhone(e.target.value)} />
               <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />

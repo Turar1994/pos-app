@@ -78,11 +78,11 @@ export default function ProfilePage() {
             { label: lang === 'kz' ? 'Мекен-жай' : 'Адрес', key: 'address', type: 'text' },
           ].map(f => (
             <div key={f.key}>
-              <label style={{ fontSize: 12, color: '#6b7280', marginBottom: 4, display: 'block' }}>{f.label}</label>
+              <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>{f.label}</label>
               <input type={f.type} value={(profile as any)[f.key]} onChange={e => setProfile({ ...profile, [f.key]: e.target.value })} />
             </div>
           ))}
-          {success && <p style={{ color: '#0F6E56', fontSize: 13 }}>✓ {success}</p>}
+          {success && <p style={{ color: 'var(--primary)', fontSize: 13 }}>✓ {success}</p>}
           <button className="btn btn-primary" onClick={saveProfile} disabled={saving}>
             {saving ? T.loading : (lang === 'kz' ? 'Сақтау' : 'Сохранить')}
           </button>
@@ -95,8 +95,8 @@ export default function ProfilePage() {
           <input type="password" placeholder={lang === 'kz' ? 'Ескі пароль' : 'Старый пароль'} value={oldPassword} onChange={e => setOldPassword(e.target.value)} />
           <input type="password" placeholder={lang === 'kz' ? 'Жаңа пароль' : 'Новый пароль'} value={newPassword} onChange={e => setNewPassword(e.target.value)} />
           <input type="password" placeholder={lang === 'kz' ? 'Жаңа паролді қайталаңыз' : 'Повторите новый пароль'} value={newPassword2} onChange={e => setNewPassword2(e.target.value)} />
-          {passError && <p style={{ color: '#D85A30', fontSize: 13 }}>{passError}</p>}
-          {passSuccess && <p style={{ color: '#0F6E56', fontSize: 13 }}>✓ {passSuccess}</p>}
+          {passError && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{passError}</p>}
+          {passSuccess && <p style={{ color: 'var(--primary)', fontSize: 13 }}>✓ {passSuccess}</p>}
           <button className="btn btn-primary" onClick={changePassword} disabled={passLoading}>
             {passLoading ? T.loading : (lang === 'kz' ? 'Паролді өзгерту' : 'Изменить пароль')}
           </button>

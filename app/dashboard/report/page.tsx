@@ -194,9 +194,9 @@ export default function ReportPage() {
                   ? (lang === 'kz' ? 'Ешқашан сатылмаған' : 'Никогда не продавался')
                   : `${p.daysSince} ${lang === 'kz' ? 'күн' : 'дн.'}`
                 const urgency = p.daysSince === null || p.daysSince >= 90 ? 'high' : p.daysSince >= 60 ? 'mid' : 'low'
-                const borderColor = urgency === 'high' ? 'var(--danger)' : urgency === 'mid' ? 'var(--warning)' : '#94A3B8'
+                const borderColor = urgency === 'high' ? 'var(--danger)' : urgency === 'mid' ? 'var(--warning)' : 'var(--muted)'
                 const badgeBg = urgency === 'high' ? 'var(--danger-light)' : urgency === 'mid' ? 'rgba(245,158,11,0.12)' : 'var(--surface)'
-                const badgeColor = urgency === 'high' ? 'var(--danger)' : urgency === 'mid' ? '#D97706' : 'var(--muted)'
+                const badgeColor = urgency === 'high' ? 'var(--danger)' : urgency === 'mid' ? 'var(--warning)' : 'var(--muted)'
                 const cat = p.category ? CAT_LABELS[p.category] : null
                 return (
                   <div key={p.id} style={{
@@ -302,7 +302,7 @@ export default function ReportPage() {
           </div>
 
           {topProducts.length > 0 && (
-            <div style={{ background: '#fff', borderRadius: 20, padding: '16px 18px', marginBottom: 12, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
+            <div style={{ background: 'var(--card-bg)', borderRadius: 20, padding: '16px 18px', marginBottom: 12, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
               <div className="section-title">{lang === 'kz' ? 'Топ сатылымдар (30 күн)' : 'Топ продаж (30 дней)'}</div>
               {topProducts.map((p, i) => (
                 <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < topProducts.length - 1 ? '1px solid var(--border)' : 'none' }}>

@@ -455,7 +455,7 @@ export default function StockPage() {
           )}
           <button onClick={stopScanner} style={{
             position: 'absolute', bottom: 44, left: '50%', transform: 'translateX(-50%)',
-            background: '#fff', border: 'none', borderRadius: 99,
+            background: 'var(--card-bg)', border: 'none', borderRadius: 99,
             padding: '12px 40px', fontSize: 15, fontWeight: 600, cursor: 'pointer'
           }}>
             {lang === 'kz' ? '✕ Жабу' : '✕ Закрыть'}
@@ -466,12 +466,12 @@ export default function StockPage() {
       {/* Стандартты тізім модалы */}
       {showSeed && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
-          <div style={{ background: '#fff', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80vh', overflow: 'auto', padding: '20px 16px 32px' }}>
-            <div style={{ width: 40, height: 4, background: '#e5e7eb', borderRadius: 99, margin: '0 auto 16px' }} />
+          <div style={{ background: 'var(--card-bg)', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80vh', overflow: 'auto', padding: '20px 16px 32px' }}>
+            <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 16px' }} />
             <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>
               {lang === 'kz' ? '📋 Стандартты тауарлар тізімі' : '📋 Стандартный список товаров'}
             </div>
-            <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 16 }}>
               {lang === 'kz'
                 ? 'Қай санаттарды қосу керек? Баға мен санын өзіңіз кейін енгізесіз.'
                 : 'Какие категории добавить? Цену и количество заполните сами позже.'}
@@ -480,7 +480,7 @@ export default function StockPage() {
               <button onClick={() => setSeedCats(new Set(CATEGORIES.map(c => c.key)))} style={{ fontSize: 12, color: 'var(--accent)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                 {lang === 'kz' ? 'Барлығын белгілеу' : 'Выбрать все'}
               </button>
-              <button onClick={() => setSeedCats(new Set())} style={{ fontSize: 12, color: '#9ca3af', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
+              <button onClick={() => setSeedCats(new Set())} style={{ fontSize: 12, color: 'var(--muted)', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}>
                 {lang === 'kz' ? 'Тазалау' : 'Снять все'}
               </button>
             </div>
@@ -494,18 +494,18 @@ export default function StockPage() {
                   setSeedCats(next)
                 }} style={{
                   display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px',
-                  border: `2px solid ${checked ? 'var(--accent)' : '#e5e7eb'}`,
+                  border: `2px solid ${checked ? 'var(--accent)' : 'var(--border)'}`,
                   borderRadius: 12, marginBottom: 8, cursor: 'pointer',
-                  background: checked ? '#f0faf5' : '#fff'
+                  background: checked ? 'var(--primary-light)' : 'var(--card-bg)'
                 }}>
                   <span style={{ fontSize: 26 }}>{c.icon}</span>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: 14 }}>{lang === 'kz' ? c.kz : c.ru}</div>
-                    <div style={{ fontSize: 12, color: '#9ca3af' }}>{count} {lang === 'kz' ? 'тауар' : 'товаров'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)' }}>{count} {lang === 'kz' ? 'тауар' : 'товаров'}</div>
                   </div>
                   <div style={{
-                    width: 22, height: 22, borderRadius: 6, border: `2px solid ${checked ? 'var(--accent)' : '#d1d5db'}`,
-                    background: checked ? 'var(--accent)' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                    width: 22, height: 22, borderRadius: 6, border: `2px solid ${checked ? 'var(--accent)' : 'var(--border)'}`,
+                    background: checked ? 'var(--accent)' : 'var(--card-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center'
                   }}>
                     {checked && <span style={{ color: '#fff', fontSize: 13, fontWeight: 700 }}>✓</span>}
                   </div>
@@ -529,7 +529,7 @@ export default function StockPage() {
           value={search} onChange={e => setSearch(e.target.value)} style={{ flex: 1 }} />
         <button onClick={() => setShowSeed(true)} style={{
           width: 'auto', padding: '0 12px', borderRadius: 8,
-          border: '1px solid var(--accent)', background: '#f0faf5',
+          border: '1px solid var(--accent)', background: 'var(--surface)',
           color: 'var(--accent)', fontWeight: 600, fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap'
         }}>
           📋
@@ -610,7 +610,7 @@ export default function StockPage() {
                 />
               </div>
               <div>
-                <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+                <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>
                   {lang === 'kz' ? 'Өлшем' : 'Единица'}
                 </label>
                 <select value={form.unit} onChange={e => setForm({ ...form, unit: e.target.value })}>
@@ -619,14 +619,14 @@ export default function StockPage() {
               </div>
             </div>
             <div>
-              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>
                 {lang === 'kz' ? 'Жарамдылық мерзімі (міндетті емес)' : 'Срок годности (необязательно)'}
               </label>
               <input type="date" value={form.expiry_date}
                 onChange={e => setForm({ ...form, expiry_date: e.target.value })} />
             </div>
             <div>
-              <label style={{ fontSize: 11, color: '#6b7280', display: 'block', marginBottom: 3 }}>
+              <label style={{ fontSize: 11, color: 'var(--muted)', display: 'block', marginBottom: 3 }}>
                 {lang === 'kz' ? 'Штрихкод (міндетті емес)' : 'Штрихкод (необязательно)'}
               </label>
               <div style={{ display: 'flex', gap: 6 }}>
@@ -641,11 +641,11 @@ export default function StockPage() {
                 />
                 <button type="button" onClick={startScanner} style={{
                   padding: '0 14px', borderRadius: 8, border: '1px solid #e5e7eb',
-                  background: '#fff', cursor: 'pointer', fontSize: 20, flexShrink: 0
+                  background: 'var(--card-bg)', cursor: 'pointer', fontSize: 20, flexShrink: 0
                 }}>📷</button>
               </div>
               {form.barcode && (
-                <div style={{ fontSize: 11, color: '#0F6E56', marginTop: 4 }}>✓ {form.barcode}</div>
+                <div style={{ fontSize: 11, color: 'var(--primary)', marginTop: 4 }}>✓ {form.barcode}</div>
               )}
             </div>
             <div className="row-2">

@@ -111,9 +111,9 @@ export default function HomePage() {
           {lowStock.length > 0 && (
             <button onClick={() => router.push('/dashboard/stock')} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-              background: '#FFF7ED', border: '1px solid #FED7AA', borderRadius: 10,
+              background: 'var(--warning-light)', border: '1px solid var(--warning)', borderRadius: 10,
               cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
-              transition: 'transform 0.12s', fontSize: 13, color: '#92400E', fontWeight: 600,
+              transition: 'transform 0.12s', fontSize: 13, color: 'var(--warning)', fontWeight: 600,
             }}>
               <span className="low-stock-dot" style={{ background: 'var(--warning)', flexShrink: 0 }} />
               {lowStock.length} {lang === 'kz' ? 'тауар аз қалды →' : 'товаров на исходе →'}
@@ -122,9 +122,9 @@ export default function HomePage() {
           {overdueDebts.length > 0 && (
             <button onClick={() => router.push('/dashboard/debts')} style={{
               display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
-              background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: 10,
+              background: 'var(--danger-light)', border: '1px solid var(--danger)', borderRadius: 10,
               cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
-              transition: 'transform 0.12s', fontSize: 13, color: '#B91C1C', fontWeight: 600,
+              transition: 'transform 0.12s', fontSize: 13, color: 'var(--danger)', fontWeight: 600,
             }}>
               💳 {overdueDebts.length} {lang === 'kz' ? 'қарыздың мерзімі өтті →' : 'долга просрочено →'}
             </button>
@@ -178,7 +178,7 @@ export default function HomePage() {
       {/* Last receipt */}
       {lastReceipt && (
         <div className="anim-fade-in" style={{
-          background: '#fff', borderRadius: 20, marginBottom: 12,
+          background: 'var(--card-bg)', borderRadius: 20, marginBottom: 12,
           boxShadow: '0 4px 16px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04)',
           overflow: 'hidden', border: '1px solid var(--border)'
         }}>
