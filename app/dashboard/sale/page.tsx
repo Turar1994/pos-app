@@ -139,18 +139,18 @@ export default function SalePage() {
     setHint(0)
     lastScannedRef.current = ''
 
-    hintTimerRef.current = setTimeout(() => setHint(1), 6000)
+    hintTimerRef.current = setTimeout(() => setHint(1), 8000)
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: { ideal: 'environment' },
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: { ideal: 30 },
         }
       })
 
-      // Continuous autofocus
       const track = stream.getVideoTracks()[0]
       try {
         await (track as any).applyConstraints({
@@ -159,31 +159,59 @@ export default function SalePage() {
       } catch (e) {}
 
       streamRef.current = stream
-
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
       }
 
-      // ZXing reader
-      const { BrowserMultiFormatReader, NotFoundException } = await import('@zxing/library')
-      const reader = new BrowserMultiFormatReader()
-      readerRef.current = reader
-
-      reader.decodeFromStream(stream, videoRef.current!, (result, err) => {
-        if (!scanningRef.current) return
-        if (result) {
+      // Native BarcodeDetector (Chrome Android) — аппараттық жеделдету, лазер жылдамдығы
+      if ('BarcodeDetector' in window) {
+        let detector: any
+        try {
+          detector = new (window as any).BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e', 'code_39', 'code_93', 'qr_code', 'pdf417', 'data_matrix', 'aztec', 'itf']
+          })
+        } catch {
+          detector = new (window as any).BarcodeDetector()
+        }
+        const scan = async () => {
+          if (!scanningRef.current) return
+          try {
+            const barcodes = await detector.detect(videoRef.current!)
+            if (barcodes.length > 0) {
+              const code = barcodes[0].rawValue
+              const now = Date.now()
+              if (code === lastScannedRef.current && now - lastTimeRef.current < 1500) {
+                requestAnimationFrame(scan); return
+              }
+              lastScannedRef.current = code
+              lastTimeRef.current = now
+              handleBarcode(code)
+              return
+            }
+          } catch {}
+          requestAnimationFrame(scan)
+        }
+        requestAnimationFrame(scan)
+      } else {
+        // ZXing fallback
+        const { BrowserMultiFormatReader } = await import('@zxing/library')
+        const reader = new BrowserMultiFormatReader()
+        readerRef.current = reader
+        reader.decodeFromStream(stream, videoRef.current!, (result) => {
+          if (!scanningRef.current || !result) return
           const code = result.getText()
           const now = Date.now()
-          if (code === lastScannedRef.current && now - lastTimeRef.current < 1200) return
+          if (code === lastScannedRef.current && now - lastTimeRef.current < 1500) return
           lastScannedRef.current = code
           lastTimeRef.current = now
           handleBarcode(code)
-        }
-      })
+        })
+      }
 
     } catch (e) {
       setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
+      setScanning(false)
     }
   }
 
@@ -473,52 +501,84 @@ export default function SalePage() {
 
       {scanning && (
         <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 999, display: 'flex', flexDirection: 'column' }}>
+          <style>{`
+            @keyframes laserSweep {
+              0%   { top: 6px;  opacity: 1; }
+              48%  { top: calc(100% - 8px); opacity: 1; }
+              50%  { top: calc(100% - 8px); opacity: 0; }
+              52%  { top: 6px;  opacity: 0; }
+              54%  { opacity: 1; }
+              100% { top: 6px;  opacity: 1; }
+            }
+            @keyframes cornerPulse {
+              0%,100% { opacity:1; } 50% { opacity:0.5; }
+            }
+          `}</style>
           <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
 
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-            {/* Рамка */}
+          {/* Dark overlay с прозрачным окном */}
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+            {/* Top dark */}
+            <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 'calc(50% + 70px)', background: 'rgba(0,0,0,0.6)' }} />
+            {/* Bottom dark */}
+            <div style={{ position: 'absolute', top: 'calc(50% + 70px)', left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)' }} />
+            {/* Left dark */}
+            <div style={{ position: 'absolute', top: 'calc(50% - 70px)', left: 0, width: 'calc(50% - 140px)', height: 140, background: 'rgba(0,0,0,0.6)' }} />
+            {/* Right dark */}
+            <div style={{ position: 'absolute', top: 'calc(50% - 70px)', right: 0, width: 'calc(50% - 140px)', height: 140, background: 'rgba(0,0,0,0.6)' }} />
+
+            {/* Scanner window */}
             <div style={{
+              position: 'absolute',
+              left: '50%', top: '50%',
+              transform: 'translate(-50%, -50%)',
               width: 280, height: 140,
-              border: `3px solid ${scanSuccess ? '#0F6E56' : 'rgba(255,80,80,0.9)'}`,
-              borderRadius: 14,
-              boxShadow: `0 0 0 9999px rgba(0,0,0,0.5), 0 0 20px ${scanSuccess ? 'rgba(15,110,86,0.5)' : 'rgba(255,80,80,0.3)'}`,
-              position: 'relative',
-              transition: 'all 0.2s',
+              overflow: 'hidden',
             }}>
-              {[
-                { top: -3, left: -3, borderTop: '4px solid', borderLeft: '4px solid', borderRadius: '4px 0 0 0' },
-                { top: -3, right: -3, borderTop: '4px solid', borderRight: '4px solid', borderRadius: '0 4px 0 0' },
-                { bottom: -3, left: -3, borderBottom: '4px solid', borderLeft: '4px solid', borderRadius: '0 0 0 4px' },
-                { bottom: -3, right: -3, borderBottom: '4px solid', borderRight: '4px solid', borderRadius: '0 0 4px 0' },
-              ].map((s, i) => (
-                <div key={i} style={{
-                  position: 'absolute', width: 22, height: 22,
-                  borderColor: scanSuccess ? '#0F6E56' : '#fff', ...s
-                }} />
-              ))}
+              {/* Laser line */}
               {!scanSuccess && (
                 <div style={{
-                  position: 'absolute', top: '50%', left: 6, right: 6, height: 2,
-                  background: 'rgba(255,80,80,0.75)',
-                  boxShadow: '0 0 6px rgba(255,80,80,0.6)',
+                  position: 'absolute', left: 0, right: 0, height: 2,
+                  background: 'linear-gradient(90deg, transparent, #FF3B30 20%, #FF3B30 80%, transparent)',
+                  boxShadow: '0 0 8px 2px rgba(255,59,48,0.8)',
+                  animation: 'laserSweep 1.6s ease-in-out infinite',
                 }} />
               )}
+              {scanSuccess && (
+                <div style={{ position: 'absolute', inset: 0, background: 'rgba(34,197,94,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 40 }}>✅</div>
+              )}
             </div>
+
+            {/* Corner brackets */}
+            {(() => {
+              const color = scanSuccess ? '#22C55E' : '#fff'
+              const corners = [
+                { top: 'calc(50% - 70px)', left: 'calc(50% - 140px)', borderTop: `3px solid ${color}`, borderLeft: `3px solid ${color}`, borderRadius: '6px 0 0 0' },
+                { top: 'calc(50% - 70px)', right: 'calc(50% - 140px)', borderTop: `3px solid ${color}`, borderRight: `3px solid ${color}`, borderRadius: '0 6px 0 0' },
+                { bottom: 'calc(50% - 70px)', left: 'calc(50% - 140px)', borderBottom: `3px solid ${color}`, borderLeft: `3px solid ${color}`, borderRadius: '0 0 0 6px' },
+                { bottom: 'calc(50% - 70px)', right: 'calc(50% - 140px)', borderBottom: `3px solid ${color}`, borderRight: `3px solid ${color}`, borderRadius: '0 0 6px 0' },
+              ]
+              return corners.map((s, i) => (
+                <div key={i} style={{ position: 'absolute', width: 28, height: 28, ...s }} />
+              ))
+            })()}
+
+            {/* Hint text */}
             <div style={{
-              marginTop: 16, color: '#fff', fontSize: 13,
-              background: 'rgba(0,0,0,0.65)', padding: '8px 18px',
-              borderRadius: 99, maxWidth: 300, textAlign: 'center'
+              position: 'absolute', top: 'calc(50% + 90px)', left: '50%', transform: 'translateX(-50%)',
+              color: '#fff', fontSize: 13, whiteSpace: 'nowrap',
+              background: 'rgba(0,0,0,0.5)', padding: '6px 16px', borderRadius: 99,
             }}>
-              {scanMsg || hintText}
+              {scanMsg || (lang === 'kz' ? 'Штрихкодты рамкаға бағыттаңыз' : 'Наведите штрихкод на рамку')}
             </div>
           </div>
 
-          {scanMsg && (
+          {/* Result toast */}
+          {scanMsg && !scanSuccess && (
             <div style={{
               position: 'absolute', bottom: 130, left: 20, right: 20,
-              background: scanSuccess ? '#0F6E56' : '#D85A30',
-              color: '#fff', borderRadius: 12, padding: '14px',
-              textAlign: 'center', fontSize: 16, fontWeight: 600,
+              background: '#D85A30', color: '#fff', borderRadius: 12,
+              padding: '14px', textAlign: 'center', fontSize: 15, fontWeight: 600,
             }}>{scanMsg}</div>
           )}
 
