@@ -6,7 +6,7 @@ import { t } from '@/lib/lang'
 import { useCountUp } from '@/lib/useCountUp'
 import { usePullToRefresh } from '@/lib/usePullToRefresh'
 
-type Product = { id: string; name: string; price: number; quantity: number; unit?: string; category?: string; barcode?: string }
+type Product = { id: string; name: string; price: number; quantity: number; unit?: string; category?: string; barcode?: string; expiry_date?: string }
 type CartItem = { product: Product; qty: number; amount: number }
 
 const CATEGORIES = [
@@ -244,6 +244,10 @@ export default function SalePage() {
     } catch (e) {}
   }
 
+  function isExpired(p: Product) {
+    return !!p.expiry_date && p.expiry_date < new Date().toISOString().split('T')[0]
+  }
+
   function handleBarcode(code: string) {
     const product = productsRef.current.find(p => p.barcode === code)
     if (!product) {
@@ -252,6 +256,14 @@ export default function SalePage() {
       if (navigator.vibrate) navigator.vibrate([100, 50, 100])
       playBeep(false)
       setTimeout(() => setScanMsg(''), 2000)
+      return
+    }
+    if (isExpired(product)) {
+      setScanMsg(lang === 'kz' ? `❌ Мерзімі өтті: ${product.name}` : `❌ Просрочено: ${product.name}`)
+      setScanSuccess(false)
+      if (navigator.vibrate) navigator.vibrate([100, 50, 100])
+      playBeep(false)
+      setTimeout(() => setScanMsg(''), 2500)
       return
     }
     if (product.unit === 'кг') {
@@ -276,6 +288,7 @@ export default function SalePage() {
   }
 
   function addToCart(product: Product, e?: React.MouseEvent) {
+    if (isExpired(product)) return
     if (product.unit === 'кг') { setKgModal(product); setKgValue(''); return }
 
     // Haptic
@@ -689,16 +702,22 @@ export default function SalePage() {
             </div>
           )}
           <div key={search + '|' + String(selectedCat)} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }} className="filter-in">
-            {filtered.map(p => (
+            {filtered.map(p => {
+              const expired = isExpired(p)
+              return (
               <div key={p.id}
                 onClick={(e) => addToCart(p, e)}
-                onPointerDown={() => setPressedId('prod-' + p.id)}
+                onPointerDown={() => !expired && setPressedId('prod-' + p.id)}
                 onPointerUp={() => setPressedId(null)}
                 onPointerLeave={() => setPressedId(null)}
                 style={{
                   position: 'relative', overflow: 'hidden',
-                  background: 'var(--card-bg)', border: '1px solid var(--border)', borderRadius: 12,
-                  padding: '12px', userSelect: 'none', cursor: 'pointer',
+                  background: expired ? 'var(--surface)' : 'var(--card-bg)',
+                  border: `1px solid ${expired ? 'var(--danger)' : 'var(--border)'}`,
+                  borderRadius: 12,
+                  padding: '12px', userSelect: 'none',
+                  cursor: expired ? 'not-allowed' : 'pointer',
+                  opacity: expired ? 0.7 : 1,
                   WebkitTapHighlightColor: 'transparent',
                   boxShadow: pressedId === 'prod-' + p.id
                     ? '0 1px 2px rgba(0,0,0,0.08)'
@@ -709,20 +728,30 @@ export default function SalePage() {
                   transition: 'transform 140ms cubic-bezier(0.34,1.56,0.64,1), box-shadow 140ms ease-out',
                   transformStyle: 'preserve-3d',
                 }}>
-                {ripples.filter(r => r.productId === p.id).map(r => (
+                {!expired && ripples.filter(r => r.productId === p.id).map(r => (
                   <span key={r.id} className="ripple-wave" style={{ left: r.x, top: r.y }} />
                 ))}
-                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 5, color: 'var(--text)' }}>{p.name}</div>
-                <div style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 700 }}>{p.price.toLocaleString()} ₸</div>
+                {expired && (
+                  <div style={{ position: 'absolute', top: 4, right: 4, fontSize: 10, background: 'var(--danger)', color: '#fff', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>
+                    {lang === 'kz' ? 'ӨТТІ' : 'ПРОСРОЧЕНО'}
+                  </div>
+                )}
+                <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 5, color: expired ? 'var(--danger)' : 'var(--text)' }}>{p.name}</div>
+                <div style={{ fontSize: 13, color: expired ? 'var(--muted)' : 'var(--accent)', fontWeight: 700 }}>{p.price.toLocaleString()} ₸</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>/{p.unit || 'шт'}</div>
                 <div style={{ fontSize: 11, marginTop: 4, display: 'flex', alignItems: 'center' }}>
-                  {p.quantity <= 5 && <span className="low-stock-dot" style={{ background: p.quantity <= 2 ? 'var(--danger)' : 'var(--warning)' }} />}
-                  <span style={{ color: p.quantity <= 2 ? 'var(--danger)' : p.quantity <= 5 ? 'var(--warning)' : 'var(--muted)' }}>
-                    {lang === 'kz' ? 'Қалдық:' : 'Остаток:'} {p.quantity} {p.unit || 'шт'}
-                  </span>
+                  {expired
+                    ? <span style={{ color: 'var(--danger)' }}>❌ {p.expiry_date}</span>
+                    : <>
+                        {p.quantity <= 5 && <span className="low-stock-dot" style={{ background: p.quantity <= 2 ? 'var(--danger)' : 'var(--warning)' }} />}
+                        <span style={{ color: p.quantity <= 2 ? 'var(--danger)' : p.quantity <= 5 ? 'var(--warning)' : 'var(--muted)' }}>
+                          {lang === 'kz' ? 'Қалдық:' : 'Остаток:'} {p.quantity} {p.unit || 'шт'}
+                        </span>
+                      </>
+                  }
                 </div>
               </div>
-            ))}
+            )})}
             {filtered.length === 0 && (
               <div className="anim-fade-in" style={{ gridColumn: '1/-1', textAlign: 'center', padding: '36px 24px', color: 'var(--muted)', fontSize: 14 }}>
                 <div style={{ fontSize: 40, marginBottom: 10 }}>🔍</div>

@@ -25,6 +25,7 @@ export default function HomePage() {
   const [lastReceipt, setLastReceipt] = useState<Receipt | null>(null)
   const [lowStock, setLowStock] = useState<any[]>([])
   const [overdueDebts, setOverdueDebts] = useState<any[]>([])
+  const [expiredProducts, setExpiredProducts] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const refresh2 = useCallback(() => loadData(), [store.id])
@@ -36,7 +37,7 @@ export default function HomePage() {
     const supabase = createClient()
     const today = new Date().toISOString().split('T')[0]
 
-    const [receiptsRes, paidTodayRes, lowStockRes, overdueRes] = await Promise.all([
+    const [receiptsRes, paidTodayRes, lowStockRes, overdueRes, expiredRes] = await Promise.all([
       supabase.from('receipts').select('*').eq('store_id', store.id)
         .gte('created_at', today).neq('payment_type', 'debt')
         .order('created_at', { ascending: false }),
@@ -44,6 +45,8 @@ export default function HomePage() {
         .eq('is_paid', true).gte('paid_at', today),
       supabase.from('products').select('*').eq('store_id', store.id).lte('quantity', 5),
       supabase.from('debts').select('*').eq('store_id', store.id).eq('is_paid', false).lt('due_date', today),
+      supabase.from('products').select('id,name,expiry_date').eq('store_id', store.id)
+        .not('expiry_date', 'is', null).lt('expiry_date', today).gt('quantity', 0),
     ])
 
     const receipts = receiptsRes.data || []
@@ -65,10 +68,11 @@ export default function HomePage() {
 
     setLowStock(lowStockRes.data || [])
     setOverdueDebts(overdueRes.data || [])
+    setExpiredProducts(expiredRes.data || [])
     setLoading(false)
   }
 
-  const hasWarning = lowStock.length > 0 || overdueDebts.length > 0
+  const hasWarning = lowStock.length > 0 || overdueDebts.length > 0 || expiredProducts.length > 0
   const displayRevenue = useCountUp(todayTotal, 900)
   const displayCash = useCountUp(cashTotal, 700)
   const displayKaspi = useCountUp(kaspiTotal, 700)
@@ -127,6 +131,24 @@ export default function HomePage() {
               transition: 'transform 0.12s', fontSize: 13, color: 'var(--danger)', fontWeight: 600,
             }}>
               💳 {overdueDebts.length} {lang === 'kz' ? 'қарыздың мерзімі өтті →' : 'долга просрочено →'}
+            </button>
+          )}
+          {expiredProducts.length > 0 && (
+            <button onClick={() => router.push('/dashboard/stock')} style={{
+              display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px',
+              background: 'var(--danger-light)', border: '2px solid var(--danger)', borderRadius: 10,
+              cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+              transition: 'transform 0.12s', fontSize: 13, color: 'var(--danger)', fontWeight: 700,
+              width: '100%',
+            }}>
+              <span style={{ fontSize: 16 }}>🚫</span>
+              <span style={{ flex: 1, textAlign: 'left' }}>
+                {lang === 'kz'
+                  ? `${expiredProducts.length} тауардың жарамдылық мерзімі өтті: ${expiredProducts.slice(0,3).map((p:any) => p.name).join(', ')}${expiredProducts.length > 3 ? '...' : ''}`
+                  : `Просрочено ${expiredProducts.length} товаров: ${expiredProducts.slice(0,3).map((p:any) => p.name).join(', ')}${expiredProducts.length > 3 ? '...' : ''}`
+                }
+              </span>
+              <span>→</span>
             </button>
           )}
         </div>
