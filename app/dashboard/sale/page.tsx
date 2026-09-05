@@ -55,6 +55,7 @@ export default function SalePage() {
   const [ripples, setRipples] = useState<Ripple[]>([])
   const [successFading, setSuccessFading] = useState(false)
   const [salesCount, setSalesCount] = useState<Record<string, number>>({})
+  const [showKaspiModal, setShowKaspiModal] = useState(false)
 
   const searchRef = useRef<HTMLInputElement>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -487,6 +488,42 @@ export default function SalePage() {
         </div>
       ))}
 
+      {/* Kaspi QR Modal */}
+      {showKaspiModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ background: 'var(--card-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 340, textAlign: 'center' }}>
+            <div style={{ fontSize: 36, marginBottom: 8 }}>📱</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: 'var(--text)', marginBottom: 4 }}>
+              {lang === 'kz' ? 'Kaspi арқылы төлем' : 'Оплата через Kaspi'}
+            </h3>
+            <div style={{ fontSize: 28, fontWeight: 800, color: 'var(--primary)', marginBottom: 16 }}>
+              {totalAmount.toLocaleString()} ₸
+            </div>
+            {store.kaspi_qr_url ? (
+              <img src={store.kaspi_qr_url} alt="Kaspi QR" style={{ width: 200, height: 200, objectFit: 'contain', borderRadius: 12, border: '1px solid var(--border)', marginBottom: 12 }} />
+            ) : (
+              <div style={{ width: 200, height: 200, borderRadius: 12, border: '2px dashed var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--muted)', fontSize: 13, margin: '0 auto 12px', flexDirection: 'column', gap: 8 }}>
+                <span style={{ fontSize: 32 }}>🖼️</span>
+                {lang === 'kz' ? 'QR жүктелмеген' : 'QR не загружен'}
+              </div>
+            )}
+            {store.kaspi_number && (
+              <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--text)', marginBottom: 16, letterSpacing: 1 }}>
+                {store.kaspi_number}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowKaspiModal(false)} style={{ flex: 1, padding: '12px', borderRadius: 12, border: '1px solid var(--border)', background: 'var(--surface)', cursor: 'pointer', color: 'var(--muted)', fontWeight: 600 }}>
+                {lang === 'kz' ? 'Болдырмау' : 'Отмена'}
+              </button>
+              <button onClick={() => { setShowKaspiModal(false); handleSale(false) }} style={{ flex: 2, padding: '12px', borderRadius: 12, border: 'none', background: 'var(--primary)', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 15 }}>
+                {lang === 'kz' ? '✓ Растау' : '✓ Подтвердить'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* KG Bottom Sheet */}
       {kgModal && (
         <div className="sheet-overlay" onClick={() => setKgModal(null)}>
@@ -818,7 +855,7 @@ export default function SalePage() {
             ))}
           </div>
           <div className="row-2">
-            <button className="btn btn-success pressable" onClick={() => handleSale(false)} disabled={loading}>
+            <button className="btn btn-success pressable" onClick={() => { if (payType === 'kaspi' && cart.length > 0) setShowKaspiModal(true); else handleSale(false) }} disabled={loading}>
               {loading ? T.loading : (lang === 'kz' ? '✓ Сату' : '✓ Продать')}
             </button>
             <button className="btn pressable" onClick={() => setShowDebtForm(!showDebtForm)} style={{ borderColor: 'var(--warning)', color: 'var(--warning)' }}>

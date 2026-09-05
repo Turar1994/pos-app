@@ -7,7 +7,7 @@ import { t } from '@/lib/lang'
 type Profile = { full_name: string; phone: string; birth_date: string; store_name: string; address: string }
 
 export default function ProfilePage() {
-  const { lang } = useApp()
+  const { lang, store, refreshStore } = useApp()
   const T = t[lang]
   const [profile, setProfile] = useState<Profile>({ full_name: '', phone: '', birth_date: '', store_name: '', address: '' })
   const [loading, setLoading] = useState(true)
@@ -19,6 +19,19 @@ export default function ProfilePage() {
   const [passLoading, setPassLoading] = useState(false)
   const [passSuccess, setPassSuccess] = useState('')
   const [passError, setPassError] = useState('')
+
+  // Kaspi settings
+  const [kaspiNumber, setKaspiNumber] = useState(store.kaspi_number || '')
+  const [kaspiQr, setKaspiQr] = useState(store.kaspi_qr_url || '')
+  const [kaspiSaving, setKaspiSaving] = useState(false)
+  const [kaspiSuccess, setKaspiSuccess] = useState('')
+
+  // Owner password
+  const [ownerPwd1, setOwnerPwd1] = useState('')
+  const [ownerPwd2, setOwnerPwd2] = useState('')
+  const [ownerPwdSaving, setOwnerPwdSaving] = useState(false)
+  const [ownerPwdSuccess, setOwnerPwdSuccess] = useState('')
+  const [ownerPwdError, setOwnerPwdError] = useState('')
 
   useEffect(() => { loadProfile() }, [])
 
@@ -51,7 +64,6 @@ export default function ProfilePage() {
     const supabase = createClient()
     const { data: { session } } = await supabase.auth.getSession()
     if (!session) return
-    // Ескі паролді тексеру
     const { error: signInError } = await supabase.auth.signInWithPassword({ email: session.user.email!, password: oldPassword })
     if (signInError) { setPassError(lang === 'kz' ? 'Ескі пароль қате' : 'Старый пароль неверный'); setPassLoading(false); return }
     const { error } = await supabase.auth.updateUser({ password: newPassword })
@@ -62,11 +74,36 @@ export default function ProfilePage() {
     setTimeout(() => setPassSuccess(''), 3000)
   }
 
+  async function saveKaspi() {
+    setKaspiSaving(true); setKaspiSuccess('')
+    const supabase = createClient()
+    await supabase.from('stores').update({ kaspi_number: kaspiNumber || null, kaspi_qr_url: kaspiQr || null }).eq('id', store.id)
+    await refreshStore()
+    setKaspiSaving(false)
+    setKaspiSuccess(lang === 'kz' ? 'Сақталды!' : 'Сохранено!')
+    setTimeout(() => setKaspiSuccess(''), 3000)
+  }
+
+  async function saveOwnerPwd() {
+    if (!ownerPwd1 || !ownerPwd2) { setOwnerPwdError(lang === 'kz' ? 'Барлық өрісті толтырыңыз' : 'Заполните все поля'); return }
+    if (ownerPwd1 !== ownerPwd2) { setOwnerPwdError(lang === 'kz' ? 'Парольдер сәйкес емес' : 'Пароли не совпадают'); return }
+    if (ownerPwd1.length < 4) { setOwnerPwdError(lang === 'kz' ? 'Кемінде 4 таңба' : 'Минимум 4 символа'); return }
+    setOwnerPwdSaving(true); setOwnerPwdError(''); setOwnerPwdSuccess('')
+    const supabase = createClient()
+    await supabase.from('stores').update({ owner_password: ownerPwd1 }).eq('id', store.id)
+    await refreshStore()
+    setOwnerPwd1(''); setOwnerPwd2('')
+    setOwnerPwdSaving(false)
+    setOwnerPwdSuccess(lang === 'kz' ? 'Пароль өзгертілді!' : 'Пароль изменён!')
+    setTimeout(() => setOwnerPwdSuccess(''), 3000)
+  }
+
   if (loading) return <p className="text-muted">{T.loading}</p>
 
   return (
     <div>
       <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>{lang === 'kz' ? 'Жеке кабинет' : 'Личный кабинет'}</h2>
+
       <div className="card">
         <div className="section-title">{lang === 'kz' ? 'Жеке мәліметтер' : 'Личные данные'}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -90,7 +127,52 @@ export default function ProfilePage() {
       </div>
 
       <div className="card">
-        <div className="section-title">{lang === 'kz' ? 'Пароль өзгерту' : 'Изменить пароль'}</div>
+        <div className="section-title">📱 Kaspi</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>
+              {lang === 'kz' ? 'Kaspi нөмірі' : 'Номер Kaspi'}
+            </label>
+            <input placeholder="+7 777 123 45 67" value={kaspiNumber} onChange={e => setKaspiNumber(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>
+              {lang === 'kz' ? 'QR код URL (сурет сілтемесі)' : 'URL изображения QR-кода'}
+            </label>
+            <input placeholder="https://..." value={kaspiQr} onChange={e => setKaspiQr(e.target.value)} />
+          </div>
+          {kaspiQr && (
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <img src={kaspiQr} alt="Kaspi QR preview" style={{ width: 160, height: 160, objectFit: 'contain', borderRadius: 12, border: '1px solid var(--border)' }} />
+            </div>
+          )}
+          {kaspiSuccess && <p style={{ color: 'var(--primary)', fontSize: 13 }}>✓ {kaspiSuccess}</p>}
+          <button className="btn btn-primary" onClick={saveKaspi} disabled={kaspiSaving}>
+            {kaspiSaving ? T.loading : (lang === 'kz' ? 'Сақтау' : 'Сохранить')}
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="section-title">👑 {lang === 'kz' ? 'Иесі паролі' : 'Пароль владельца'}</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
+            {store.owner_password
+              ? (lang === 'kz' ? 'Иесі парольін өзгертіңіз' : 'Изменить пароль владельца')
+              : (lang === 'kz' ? 'Иесі паролі белгіленбеген' : 'Пароль владельца не установлен')}
+          </p>
+          <input type="password" placeholder={lang === 'kz' ? 'Жаңа пароль' : 'Новый пароль'} value={ownerPwd1} onChange={e => setOwnerPwd1(e.target.value)} />
+          <input type="password" placeholder={lang === 'kz' ? 'Қайталаңыз' : 'Повторите'} value={ownerPwd2} onChange={e => setOwnerPwd2(e.target.value)} />
+          {ownerPwdError && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{ownerPwdError}</p>}
+          {ownerPwdSuccess && <p style={{ color: 'var(--primary)', fontSize: 13 }}>✓ {ownerPwdSuccess}</p>}
+          <button className="btn btn-primary" onClick={saveOwnerPwd} disabled={ownerPwdSaving}>
+            {ownerPwdSaving ? T.loading : (lang === 'kz' ? 'Паролді белгілеу' : 'Установить пароль')}
+          </button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="section-title">{lang === 'kz' ? 'Кіру паролін өзгерту' : 'Изменить пароль входа'}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <input type="password" placeholder={lang === 'kz' ? 'Ескі пароль' : 'Старый пароль'} value={oldPassword} onChange={e => setOldPassword(e.target.value)} />
           <input type="password" placeholder={lang === 'kz' ? 'Жаңа пароль' : 'Новый пароль'} value={newPassword} onChange={e => setNewPassword(e.target.value)} />
