@@ -22,6 +22,8 @@ type StagnantProduct = {
   unit?: string; category?: string
   lastSale: string | null; daysSince: number | null
 }
+type ExpiryProduct = { id: string; name: string; expiry_date: string; quantity: number; unit?: string }
+type LowStockProduct = { id: string; name: string; quantity: number; unit?: string; price: number }
 
 export default function ReportPage() {
   const { store, lang, refresh } = useApp()
@@ -36,6 +38,14 @@ export default function ReportPage() {
   const [showStagnant, setShowStagnant] = useState(false)
   const [stagnantProducts, setStagnantProducts] = useState<StagnantProduct[]>([])
   const [stagnantLoading, setStagnantLoading] = useState(false)
+  const [showStock, setShowStock] = useState(false)
+  const [showExpiry, setShowExpiry] = useState(false)
+  const [expiredProducts, setExpiredProducts] = useState<ExpiryProduct[]>([])
+  const [expiringSoon, setExpiringSoon] = useState<ExpiryProduct[]>([])
+  const [lowStockProducts, setLowStockProducts] = useState<LowStockProduct[]>([])
+  const [outOfStockProducts, setOutOfStockProducts] = useState<LowStockProduct[]>([])
+  const [expiryLoading, setExpiryLoading] = useState(false)
+  const [stockLoading, setStockLoading] = useState(false)
 
   const ptr = usePullToRefresh(useCallback(() => loadData(), [store.id, period]))
 
@@ -51,18 +61,15 @@ export default function ReportPage() {
     else { const d = new Date(now); d.setDate(d.getDate() - 30); from = d.toISOString() }
 
     const [receiptsRes, unpaidRes, paidDebtsRes] = await Promise.all([
-      // Тек қолма-қол және Kaspi чектері
       supabase.from('receipts').select('*').eq('store_id', store.id)
         .gte('created_at', from).neq('payment_type', 'debt')
         .order('created_at', { ascending: false }),
       supabase.from('debts').select('amount').eq('store_id', store.id).eq('is_paid', false),
-      // Кезеңде төленген қарыздар (paid_at бойынша)
       supabase.from('debts').select('*').eq('store_id', store.id)
         .eq('is_paid', true).gte('paid_at', from)
         .order('paid_at', { ascending: false }),
     ])
 
-    // Топ продаж үшін 30 күн
     const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30)
     const { data: salesData } = await supabase.from('sales').select('product_name, quantity, amount')
       .eq('store_id', store.id).gte('created_at', monthAgo.toISOString())
@@ -92,26 +99,17 @@ export default function ReportPage() {
     setStagnantLoading(true)
     const supabase = createClient()
     const monthAgo = new Date(); monthAgo.setDate(monthAgo.getDate() - 30)
-
     const [productsRes, salesRes] = await Promise.all([
       supabase.from('products').select('*').eq('store_id', store.id).gt('quantity', 0),
       supabase.from('sales').select('product_id, created_at').eq('store_id', store.id),
     ])
-
-    // Build last sale date per product
     const lastSaleMap: Record<string, string> = {}
     salesRes.data?.forEach((s: any) => {
-      if (s.product_id && (!lastSaleMap[s.product_id] || s.created_at > lastSaleMap[s.product_id])) {
+      if (s.product_id && (!lastSaleMap[s.product_id] || s.created_at > lastSaleMap[s.product_id]))
         lastSaleMap[s.product_id] = s.created_at
-      }
     })
-
     const stagnant = (productsRes.data || [])
-      .filter((p: any) => {
-        const last = lastSaleMap[p.id]
-        if (!last) return true
-        return new Date(last) < monthAgo
-      })
+      .filter((p: any) => { const last = lastSaleMap[p.id]; return !last || new Date(last) < monthAgo })
       .map((p: any) => {
         const last = lastSaleMap[p.id] || null
         const daysSince = last ? Math.floor((Date.now() - new Date(last).getTime()) / 86400000) : null
@@ -123,9 +121,42 @@ export default function ReportPage() {
         if (b.daysSince === null) return 1
         return b.daysSince - a.daysSince
       })
-
     setStagnantProducts(stagnant)
     setStagnantLoading(false)
+  }
+
+  async function loadExpiryProducts() {
+    setExpiryLoading(true)
+    const supabase = createClient()
+    const today = new Date().toISOString().split('T')[0]
+    const twoWeeksLater = new Date(); twoWeeksLater.setDate(twoWeeksLater.getDate() + 14)
+    const twoWeeksStr = twoWeeksLater.toISOString().split('T')[0]
+
+    const [expiredRes, soonRes] = await Promise.all([
+      supabase.from('products').select('id,name,expiry_date,quantity,unit').eq('store_id', store.id)
+        .not('expiry_date', 'is', null).lt('expiry_date', today).gt('quantity', 0)
+        .order('expiry_date'),
+      supabase.from('products').select('id,name,expiry_date,quantity,unit').eq('store_id', store.id)
+        .not('expiry_date', 'is', null).gte('expiry_date', today).lte('expiry_date', twoWeeksStr)
+        .gt('quantity', 0).order('expiry_date'),
+    ])
+    setExpiredProducts(expiredRes.data || [])
+    setExpiringSoon(soonRes.data || [])
+    setExpiryLoading(false)
+  }
+
+  async function loadStockProducts() {
+    setStockLoading(true)
+    const supabase = createClient()
+    const [lowRes, outRes] = await Promise.all([
+      supabase.from('products').select('id,name,quantity,unit,price').eq('store_id', store.id)
+        .gt('quantity', 0).lte('quantity', 5).order('quantity'),
+      supabase.from('products').select('id,name,quantity,unit,price').eq('store_id', store.id)
+        .eq('quantity', 0).order('name'),
+    ])
+    setLowStockProducts(lowRes.data || [])
+    setOutOfStockProducts(outRes.data || [])
+    setStockLoading(false)
   }
 
   const cashTotal = receipts.filter(r => r.payment_type === 'cash').reduce((s, r) => s + r.total_amount, 0)
@@ -144,30 +175,24 @@ export default function ReportPage() {
     { key: 'week', kz: '7 күн', ru: '7 дней' },
     { key: 'month', kz: '30 күн', ru: '30 дней' },
   ]
-
   const medals = ['🥇', '🥈', '🥉']
+
+  const CAT_LABELS: Record<string, { kz: string; ru: string }> = {
+    drinks: { kz: 'Сусындар', ru: 'Напитки' }, bread: { kz: 'Нан', ru: 'Хлеб' },
+    dairy: { kz: 'Сүт', ru: 'Молочные' }, sweets: { kz: 'Тәттілер', ru: 'Сладости' },
+    meat: { kz: 'Ет', ru: 'Мясо' }, fruits: { kz: 'Жемістер', ru: 'Фрукты' },
+    vegetables: { kz: 'Көкөністер', ru: 'Овощи' }, grocery: { kz: 'Бакалея', ru: 'Бакалея' },
+    hygiene: { kz: 'Тазалық', ru: 'Гигиена' }, other: { kz: 'Басқа', ru: 'Другое' },
+  }
 
   // ── Stagnant products view ──────────────────────────────
   if (showStagnant) {
-    const CAT_LABELS: Record<string, { kz: string; ru: string }> = {
-      drinks: { kz: 'Сусындар', ru: 'Напитки' }, bread: { kz: 'Нан', ru: 'Хлеб' },
-      dairy: { kz: 'Сүт', ru: 'Молочные' }, sweets: { kz: 'Тәттілер', ru: 'Сладости' },
-      meat: { kz: 'Ет', ru: 'Мясо' }, fruits: { kz: 'Жемістер', ru: 'Фрукты' },
-      vegetables: { kz: 'Көкөністер', ru: 'Овощи' }, grocery: { kz: 'Бакалея', ru: 'Бакалея' },
-      hygiene: { kz: 'Тазалық', ru: 'Гигиена' }, other: { kz: 'Басқа', ru: 'Другое' },
-    }
     return (
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
-          <button onClick={() => setShowStagnant(false)} style={{
-            padding: '7px 16px', borderRadius: 99, border: '1px solid var(--border)',
-            background: 'var(--card-bg)', cursor: 'pointer', fontSize: 13, color: 'var(--muted)',
-          }}>← {lang === 'kz' ? 'Артқа' : 'Назад'}</button>
-          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>
-            🧊 {lang === 'kz' ? 'Тұрып қалған тауарлар' : 'Стоячие товары'}
-          </span>
+          <button onClick={() => setShowStagnant(false)} style={{ padding: '7px 16px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--card-bg)', cursor: 'pointer', fontSize: 13, color: 'var(--muted)' }}>← {lang === 'kz' ? 'Артқа' : 'Назад'}</button>
+          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>🧊 {lang === 'kz' ? 'Тұрып қалған тауарлар' : 'Стоячие товары'}</span>
         </div>
-
         {stagnantLoading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 72, borderRadius: 14 }} />)}
@@ -175,18 +200,14 @@ export default function ReportPage() {
         ) : stagnantProducts.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '48px 24px' }}>
             <div style={{ fontSize: 52, marginBottom: 12 }}>✅</div>
-            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>
-              {lang === 'kz' ? 'Тұрып қалған тауар жоқ!' : 'Нет стоячих товаров!'}
-            </div>
-            <div style={{ fontSize: 13, color: 'var(--muted)' }}>
-              {lang === 'kz' ? 'Барлық тауарлар соңғы 30 күнде сатылды' : 'Все товары продавались за последние 30 дней'}
-            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginBottom: 6 }}>{lang === 'kz' ? 'Тұрып қалған тауар жоқ!' : 'Нет стоячих товаров!'}</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)' }}>{lang === 'kz' ? 'Барлық тауарлар соңғы 30 күнде сатылды' : 'Все товары продавались за последние 30 дней'}</div>
           </div>
         ) : (
           <>
             <div style={{ background: 'rgba(245,158,11,0.10)', border: '1px solid rgba(245,158,11,0.30)', borderRadius: 12, padding: '12px 14px', marginBottom: 14, fontSize: 13, color: 'var(--warning)' }}>
               <span style={{ fontWeight: 700 }}>⚠️ {stagnantProducts.length} {lang === 'kz' ? 'тауар' : 'товаров'}</span>
-              {' '}{lang === 'kz' ? '— 1 айдан астам сатылмады. Алып тастауды немесе жаңа партия алмауды қараңыз.' : '— не продавались более 1 месяца. Рассмотрите вывод из ассортимента.'}
+              {' '}{lang === 'kz' ? '— 1 айдан астам сатылмады.' : '— не продавались более 1 месяца.'}
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {stagnantProducts.map(p => {
@@ -199,40 +220,182 @@ export default function ReportPage() {
                 const badgeColor = urgency === 'high' ? 'var(--danger)' : urgency === 'mid' ? 'var(--warning)' : 'var(--muted)'
                 const cat = p.category ? CAT_LABELS[p.category] : null
                 return (
-                  <div key={p.id} style={{
-                    background: 'var(--card-bg)', borderRadius: 14, padding: '12px 14px',
-                    border: '1px solid var(--border)', borderLeft: `4px solid ${borderColor}`,
-                    display: 'flex', alignItems: 'center', gap: 12,
-                    boxShadow: 'var(--shadow-sm)',
-                  }}>
+                  <div key={p.id} style={{ background: 'var(--card-bg)', borderRadius: 14, padding: '12px 14px', border: '1px solid var(--border)', borderLeft: `4px solid ${borderColor}`, display: 'flex', alignItems: 'center', gap: 12, boxShadow: 'var(--shadow-sm)' }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {p.name}
-                      </div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{p.name}</div>
                       <div style={{ fontSize: 12, color: 'var(--muted)', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        <span>{p.price.toLocaleString()} ₸</span>
-                        <span>·</span>
+                        <span>{p.price.toLocaleString()} ₸</span><span>·</span>
                         <span>{lang === 'kz' ? 'Қалдық:' : 'Остаток:'} {p.quantity} {p.unit || 'шт'}</span>
                         {cat && <><span>·</span><span>{lang === 'kz' ? cat.kz : cat.ru}</span></>}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                      <div style={{
-                        fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 99,
-                        background: badgeBg, color: badgeColor, whiteSpace: 'nowrap',
-                      }}>
-                        {daysText}
-                      </div>
-                      {p.lastSale && (
-                        <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>
-                          {lang === 'kz' ? 'Соңғы:' : 'Посл:'} {fmtDate(p.lastSale)}
-                        </div>
-                      )}
+                      <div style={{ fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 99, background: badgeBg, color: badgeColor, whiteSpace: 'nowrap' }}>{daysText}</div>
+                      {p.lastSale && <div style={{ fontSize: 10, color: 'var(--muted)', marginTop: 4 }}>{lang === 'kz' ? 'Соңғы:' : 'Посл:'} {fmtDate(p.lastSale)}</div>}
                     </div>
                   </div>
                 )
               })}
             </div>
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // ── Expiry products view ──────────────────────────────
+  if (showExpiry) {
+    const daysUntil = (dateStr: string) => {
+      const today = new Date(); today.setHours(0,0,0,0)
+      const exp = new Date(dateStr)
+      return Math.floor((exp.getTime() - today.getTime()) / 86400000)
+    }
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <button onClick={() => setShowExpiry(false)} style={{ padding: '7px 16px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--card-bg)', cursor: 'pointer', fontSize: 13, color: 'var(--muted)' }}>← {lang === 'kz' ? 'Артқа' : 'Назад'}</button>
+          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>⏰ {lang === 'kz' ? 'Жарамдылық мерзімі' : 'Срок годности'}</span>
+        </div>
+        {expiryLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 64, borderRadius: 14 }} />)}
+          </div>
+        ) : (expiredProducts.length === 0 && expiringSoon.length === 0) ? (
+          <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+            <div style={{ fontSize: 52, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{lang === 'kz' ? 'Мерзімі өткен тауар жоқ!' : 'Нет просроченных товаров!'}</div>
+          </div>
+        ) : (
+          <>
+            {expiredProducts.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--danger-light)', border: '1.5px solid var(--danger)', borderRadius: 12, marginBottom: 10 }}>
+                  <span style={{ fontSize: 18 }}>🚫</span>
+                  <span style={{ fontWeight: 700, color: 'var(--danger)', fontSize: 14 }}>
+                    {lang === 'kz' ? `${expiredProducts.length} тауардың мерзімі өтті` : `Просрочено ${expiredProducts.length} товаров`}
+                  </span>
+                </div>
+                {expiredProducts.map(p => (
+                  <div key={p.id} style={{ background: 'var(--card-bg)', borderRadius: 12, padding: '12px 14px', border: '1px solid var(--border)', borderLeft: '4px solid var(--danger)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{p.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                        {lang === 'kz' ? 'Қалдық:' : 'Остаток:'} {p.quantity} {p.unit || 'шт'}
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--danger)', background: 'var(--danger-light)', padding: '3px 10px', borderRadius: 99 }}>
+                        {fmtDate(p.expiry_date)}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--danger)', marginTop: 3 }}>
+                        {lang === 'kz' ? 'Мерзімі өтті' : 'Просрочен'}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {expiringSoon.length > 0 && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'rgba(245,158,11,0.10)', border: '1.5px solid var(--warning)', borderRadius: 12, marginBottom: 10 }}>
+                  <span style={{ fontSize: 18 }}>⚠️</span>
+                  <span style={{ fontWeight: 700, color: 'var(--warning)', fontSize: 14 }}>
+                    {lang === 'kz' ? `${expiringSoon.length} тауардың мерзімі 2 аптада бітеді` : `У ${expiringSoon.length} товаров истекает срок через 2 недели`}
+                  </span>
+                </div>
+                {expiringSoon.map(p => {
+                  const days = daysUntil(p.expiry_date)
+                  return (
+                    <div key={p.id} style={{ background: 'var(--card-bg)', borderRadius: 12, padding: '12px 14px', border: '1px solid var(--border)', borderLeft: '4px solid var(--warning)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: 14, color: 'var(--text)' }}>{p.name}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+                          {lang === 'kz' ? 'Қалдық:' : 'Остаток:'} {p.quantity} {p.unit || 'шт'}
+                        </div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--warning)', background: 'rgba(245,158,11,0.12)', padding: '3px 10px', borderRadius: 99 }}>
+                          {fmtDate(p.expiry_date)}
+                        </div>
+                        <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 3 }}>
+                          {days === 0
+                            ? (lang === 'kz' ? 'Бүгін бітеді' : 'Истекает сегодня')
+                            : days === 1
+                            ? (lang === 'kz' ? 'Ертең бітеді' : 'Истекает завтра')
+                            : `${days} ${lang === 'kz' ? 'күнде бітеді' : 'дн. осталось'}`}
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // ── Stock view ──────────────────────────────
+  if (showStock) {
+    return (
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
+          <button onClick={() => setShowStock(false)} style={{ padding: '7px 16px', borderRadius: 99, border: '1px solid var(--border)', background: 'var(--card-bg)', cursor: 'pointer', fontSize: 13, color: 'var(--muted)' }}>← {lang === 'kz' ? 'Артқа' : 'Назад'}</button>
+          <span style={{ fontWeight: 700, fontSize: 16, color: 'var(--text)' }}>📦 {lang === 'kz' ? 'Қалдықтар жағдайы' : 'Остатки товаров'}</span>
+        </div>
+        {stockLoading ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {[1,2,3,4].map(i => <div key={i} className="skeleton" style={{ height: 64, borderRadius: 14 }} />)}
+          </div>
+        ) : (lowStockProducts.length === 0 && outOfStockProducts.length === 0) ? (
+          <div style={{ textAlign: 'center', padding: '48px 24px' }}>
+            <div style={{ fontSize: 52, marginBottom: 12 }}>✅</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{lang === 'kz' ? 'Барлық тауар жеткілікті!' : 'Все товары в наличии!'}</div>
+          </div>
+        ) : (
+          <>
+            {outOfStockProducts.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'var(--danger-light)', border: '1.5px solid var(--danger)', borderRadius: 12, marginBottom: 10 }}>
+                  <span style={{ fontSize: 18 }}>❌</span>
+                  <span style={{ fontWeight: 700, color: 'var(--danger)', fontSize: 14 }}>
+                    {lang === 'kz' ? `${outOfStockProducts.length} тауар таусылды` : `${outOfStockProducts.length} товаров нет в наличии`}
+                  </span>
+                </div>
+                {outOfStockProducts.map(p => (
+                  <div key={p.id} style={{ background: 'var(--card-bg)', borderRadius: 12, padding: '12px 14px', border: '1px solid var(--border)', borderLeft: '4px solid var(--danger)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{p.name}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--danger)', background: 'var(--danger-light)', padding: '3px 10px', borderRadius: 99 }}>
+                      0 {p.unit || 'шт'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {lowStockProducts.length > 0 && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 14px', background: 'rgba(245,158,11,0.10)', border: '1.5px solid var(--warning)', borderRadius: 12, marginBottom: 10 }}>
+                  <span style={{ fontSize: 18 }}>⚠️</span>
+                  <span style={{ fontWeight: 700, color: 'var(--warning)', fontSize: 14 }}>
+                    {lang === 'kz' ? `${lowStockProducts.length} тауар аз қалды (5 және одан аз)` : `${lowStockProducts.length} товаров на исходе (5 и менее)`}
+                  </span>
+                </div>
+                {lowStockProducts.map(p => (
+                  <div key={p.id} style={{ background: 'var(--card-bg)', borderRadius: 12, padding: '12px 14px', border: '1px solid var(--border)', borderLeft: '4px solid var(--warning)', marginBottom: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{p.name}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{p.price.toLocaleString()} ₸</div>
+                    </div>
+                    <div style={{ fontSize: 13, fontWeight: 700, color: p.quantity <= 2 ? 'var(--danger)' : 'var(--warning)', background: p.quantity <= 2 ? 'var(--danger-light)' : 'rgba(245,158,11,0.12)', padding: '4px 12px', borderRadius: 99 }}>
+                      {p.quantity} {p.unit || 'шт'}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -302,7 +465,7 @@ export default function ReportPage() {
           </div>
 
           {topProducts.length > 0 && (
-            <div style={{ background: 'var(--card-bg)', borderRadius: 20, padding: '16px 18px', marginBottom: 12, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
+            <div style={{ background: 'var(--card-bg)', borderRadius: 20, padding: '16px 18px', marginBottom: 12, border: '1px solid var(--border)' }}>
               <div className="section-title">{lang === 'kz' ? 'Топ сатылымдар (30 күн)' : 'Топ продаж (30 дней)'}</div>
               {topProducts.map((p, i) => (
                 <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: i < topProducts.length - 1 ? '1px solid var(--border)' : 'none' }}>
@@ -317,53 +480,56 @@ export default function ReportPage() {
             </div>
           )}
 
-          {/* Stagnant products button */}
-          <button onClick={() => { setShowStagnant(true); loadStagnantProducts() }} style={{
-            width: '100%', display: 'flex', alignItems: 'center', gap: 14,
-            padding: '16px 18px', marginBottom: 12,
-            background: 'var(--card-bg)', border: '1.5px solid var(--border)',
-            borderRadius: 16, cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
-            boxShadow: 'var(--shadow-sm)', transition: 'transform 0.12s',
-          }}>
-            <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(245,158,11,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
-              🧊
-            </div>
-            <div style={{ flex: 1, textAlign: 'left' }}>
-              <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>
-                {lang === 'kz' ? 'Тұрып қалған тауарлар' : 'Стоячие товары'}
+          {/* Quick-action buttons */}
+          {[
+            {
+              icon: '⏰', bg: 'rgba(239,68,68,0.10)', label: lang === 'kz' ? 'Жарамдылық мерзімі' : 'Срок годности',
+              sub: lang === 'kz' ? 'Өткен және 2 аптада бітетін тауарлар' : 'Просроченные и истекающие через 2 недели',
+              onClick: () => { setShowExpiry(true); loadExpiryProducts() },
+            },
+            {
+              icon: '📦', bg: 'rgba(59,130,246,0.10)', label: lang === 'kz' ? 'Қалдықтар жағдайы' : 'Остатки товаров',
+              sub: lang === 'kz' ? 'Таусылған және аз қалған тауарлар' : 'Отсутствующие и заканчивающиеся товары',
+              onClick: () => { setShowStock(true); loadStockProducts() },
+            },
+            {
+              icon: '🧊', bg: 'rgba(245,158,11,0.10)', label: lang === 'kz' ? 'Тұрып қалған тауарлар' : 'Стоячие товары',
+              sub: lang === 'kz' ? '1 айдан астам сатылмаған тауарлар' : 'Товары без продаж более 1 месяца',
+              onClick: () => { setShowStagnant(true); loadStagnantProducts() },
+            },
+          ].map((item, i) => (
+            <button key={i} onClick={item.onClick} style={{
+              width: '100%', display: 'flex', alignItems: 'center', gap: 14,
+              padding: '16px 18px', marginBottom: 10,
+              background: 'var(--card-bg)', border: '1.5px solid var(--border)',
+              borderRadius: 16, cursor: 'pointer', WebkitTapHighlightColor: 'transparent',
+              boxShadow: 'var(--shadow-sm)', transition: 'transform 0.12s',
+            }}>
+              <div style={{ width: 44, height: 44, borderRadius: 12, background: item.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+                {item.icon}
               </div>
-              <div style={{ fontSize: 12, color: 'var(--muted)' }}>
-                {lang === 'kz' ? '1 айдан астам сатылмаған товарлар' : 'Товары без продаж более 1 месяца'}
+              <div style={{ flex: 1, textAlign: 'left' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', marginBottom: 2 }}>{item.label}</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>{item.sub}</div>
               </div>
-            </div>
-            <span style={{ color: 'var(--muted)', fontSize: 18 }}>›</span>
-          </button>
+              <span style={{ color: 'var(--muted)', fontSize: 18 }}>›</span>
+            </button>
+          ))}
 
-          <div style={{ background: 'var(--card-bg)', borderRadius: 20, padding: '16px 18px', marginBottom: 12, border: '1px solid var(--border)', boxShadow: '0 2px 8px rgba(15,23,42,0.05)' }}>
+          <div style={{ background: 'var(--card-bg)', borderRadius: 20, padding: '16px 18px', marginBottom: 12, border: '1px solid var(--border)' }}>
             <div className="section-title">{lang === 'kz' ? 'Транзакциялар' : 'Транзакции'}</div>
             {receipts.length === 0 && paidDebts.length === 0
               ? <p style={{ textAlign: 'center', padding: '20px 0', fontSize: 14, color: 'var(--muted)' }}>{T.noData}</p>
               : <>
-                {receipts.map((r, idx) => (
+                {receipts.map((r) => (
                   <div key={r.id}>
-                    <div onClick={() => setExpandedId(expandedId === r.id ? null : r.id)} style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: 'pointer',
-                      borderBottom: expandedId === r.id ? 'none' : '1px solid var(--border)'
-                    }}>
-                      <div style={{
-                        width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                        background: r.payment_type === 'cash' ? 'var(--primary-light)' : 'var(--blue-light)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18
-                      }}>
+                    <div onClick={() => setExpandedId(expandedId === r.id ? null : r.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: 'pointer', borderBottom: expandedId === r.id ? 'none' : '1px solid var(--border)' }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: r.payment_type === 'cash' ? 'var(--primary-light)' : 'var(--blue-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
                         {r.payment_type === 'cash' ? '💵' : '📱'}
                       </div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
-                          {r.payment_type === 'cash' ? (lang === 'kz' ? 'Наличный' : 'Наличные') : 'Kaspi'}
-                        </div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                          {fmtTime(r.created_at)} · №{r.receipt_number}
-                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{r.payment_type === 'cash' ? (lang === 'kz' ? 'Наличный' : 'Наличные') : 'Kaspi'}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{fmtTime(r.created_at)} · №{r.receipt_number}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{r.total_amount.toLocaleString()} ₸</div>
@@ -372,9 +538,7 @@ export default function ReportPage() {
                     </div>
                     {expandedId === r.id && r.items && (
                       <div style={{ background: 'var(--surface)', borderRadius: 12, padding: '12px 14px', marginBottom: 10, fontFamily: 'monospace', border: '1px solid var(--border)' }}>
-                        <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>
-                          {store.name} · №{r.receipt_number} · {fmtDateTime(r.created_at)}
-                        </div>
+                        <div style={{ textAlign: 'center', fontSize: 11, color: 'var(--muted)', marginBottom: 10 }}>{store.name} · №{r.receipt_number} · {fmtDateTime(r.created_at)}</div>
                         <div style={{ borderTop: '1px dashed var(--border)', paddingTop: 8 }}>
                           {r.items.map((item: any, i: number) => (
                             <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '3px 0' }}>
@@ -394,22 +558,11 @@ export default function ReportPage() {
 
                 {paidDebts.map(d => (
                   <div key={d.id}>
-                    <div onClick={() => setExpandedId(expandedId === 'debt-' + d.id ? null : 'debt-' + d.id)} style={{
-                      display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: 'pointer',
-                      borderBottom: expandedId === 'debt-' + d.id ? 'none' : '1px solid var(--border)'
-                    }}>
-                      <div style={{
-                        width: 40, height: 40, borderRadius: 12, flexShrink: 0,
-                        background: 'var(--primary-light)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18
-                      }}>✅</div>
+                    <div onClick={() => setExpandedId(expandedId === 'debt-' + d.id ? null : 'debt-' + d.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 0', cursor: 'pointer', borderBottom: expandedId === 'debt-' + d.id ? 'none' : '1px solid var(--border)' }}>
+                      <div style={{ width: 40, height: 40, borderRadius: 12, flexShrink: 0, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✅</div>
                       <div style={{ flex: 1 }}>
-                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>
-                          {lang === 'kz' ? 'Қарыз өтелді' : 'Долг погашен'}
-                        </div>
-                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
-                          {d.debtor_name} · {fmtTime(d.paid_at)}
-                        </div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{lang === 'kz' ? 'Қарыз өтелді' : 'Долг погашен'}</div>
+                        <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>{d.debtor_name} · {fmtTime(d.paid_at)}</div>
                       </div>
                       <div style={{ textAlign: 'right' }}>
                         <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--primary)' }}>{d.amount.toLocaleString()} ₸</div>

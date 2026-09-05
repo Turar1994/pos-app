@@ -25,6 +25,7 @@ export default function ProfilePage() {
   const [kaspiQr, setKaspiQr] = useState(store.kaspi_qr_url || '')
   const [kaspiSaving, setKaspiSaving] = useState(false)
   const [kaspiSuccess, setKaspiSuccess] = useState('')
+  const [qrUploading, setQrUploading] = useState(false)
 
   // Owner password
   const [ownerPwd1, setOwnerPwd1] = useState('')
@@ -72,6 +73,29 @@ export default function ProfilePage() {
     setPassLoading(false)
     setPassSuccess(lang === 'kz' ? 'Пароль өзгертілді!' : 'Пароль изменён!')
     setTimeout(() => setPassSuccess(''), 3000)
+  }
+
+  function handleQrFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setQrUploading(true)
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      const MAX = 400
+      const scale = Math.min(MAX / img.width, MAX / img.height, 1)
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(img.width * scale)
+      canvas.height = Math.round(img.height * scale)
+      canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.85)
+      setKaspiQr(dataUrl)
+      URL.revokeObjectURL(url)
+      setQrUploading(false)
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); setQrUploading(false) }
+    img.src = url
+    e.target.value = ''
   }
 
   async function saveKaspi() {
@@ -136,16 +160,29 @@ export default function ProfilePage() {
             <input placeholder="+7 777 123 45 67" value={kaspiNumber} onChange={e => setKaspiNumber(e.target.value)} />
           </div>
           <div>
-            <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, display: 'block' }}>
-              {lang === 'kz' ? 'QR код URL (сурет сілтемесі)' : 'URL изображения QR-кода'}
+            <label style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 8, display: 'block' }}>
+              {lang === 'kz' ? 'QR код суреті' : 'Изображение QR-кода'}
             </label>
-            <input placeholder="https://..." value={kaspiQr} onChange={e => setKaspiQr(e.target.value)} />
-          </div>
-          {kaspiQr && (
-            <div style={{ display: 'flex', justifyContent: 'center' }}>
-              <img src={kaspiQr} alt="Kaspi QR preview" style={{ width: 160, height: 160, objectFit: 'contain', borderRadius: 12, border: '1px solid var(--border)' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              {kaspiQr ? (
+                <div style={{ position: 'relative' }}>
+                  <img src={kaspiQr} alt="Kaspi QR" style={{ width: 180, height: 180, objectFit: 'contain', borderRadius: 16, border: '2px solid var(--border)' }} />
+                  <button onClick={() => setKaspiQr('')} style={{ position: 'absolute', top: -8, right: -8, width: 26, height: 26, borderRadius: '50%', background: 'var(--danger)', color: '#fff', border: 'none', cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>×</button>
+                </div>
+              ) : (
+                <div style={{ width: 180, height: 180, borderRadius: 16, border: '2px dashed var(--border)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, color: 'var(--muted)' }}>
+                  <span style={{ fontSize: 36 }}>🖼️</span>
+                  <span style={{ fontSize: 12 }}>{lang === 'kz' ? 'QR жоқ' : 'QR не загружен'}</span>
+                </div>
+              )}
+              <label style={{ display: 'block', cursor: 'pointer' }}>
+                <input type="file" accept="image/*" onChange={handleQrFileChange} style={{ display: 'none' }} />
+                <div style={{ padding: '10px 20px', borderRadius: 12, border: '1.5px solid var(--primary)', color: 'var(--primary)', fontWeight: 600, fontSize: 14, background: 'var(--primary-light)', cursor: 'pointer' }}>
+                  {qrUploading ? (lang === 'kz' ? 'Жүктелуде...' : 'Загрузка...') : (lang === 'kz' ? '📷 Сурет таңдау' : '📷 Выбрать фото')}
+                </div>
+              </label>
             </div>
-          )}
+          </div>
           {kaspiSuccess && <p style={{ color: 'var(--primary)', fontSize: 13 }}>✓ {kaspiSuccess}</p>}
           <button className="btn btn-primary" onClick={saveKaspi} disabled={kaspiSaving}>
             {kaspiSaving ? T.loading : (lang === 'kz' ? 'Сақтау' : 'Сохранить')}

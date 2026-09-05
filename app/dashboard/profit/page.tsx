@@ -3,58 +3,83 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 
-type Expense = { id: string; name: string; amount: number; month: string }
+type MonthlyExpenses = {
+  id?: string
+  utilities: number   // свет, вода, ком. услуги
+  salary: number      // заработная плата
+  rent: number        // аренда
+  other: number       // другие расходы
+}
+
+const DEFAULT_EXPENSES: MonthlyExpenses = { utilities: 0, salary: 0, rent: 0, other: 0 }
 
 export default function ProfitPage() {
   const { store, lang } = useApp()
   const now = new Date()
   const [month, setMonth] = useState(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`)
   const [revenue, setRevenue] = useState(0)
-  const [expenses, setExpenses] = useState<Expense[]>([])
+  const [expenses, setExpenses] = useState<MonthlyExpenses>(DEFAULT_EXPENSES)
   const [loading, setLoading] = useState(true)
-  const [newName, setNewName] = useState('')
-  const [newAmount, setNewAmount] = useState('')
-  const [adding, setAdding] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [saveSuccess, setSaveSuccess] = useState(false)
 
   useEffect(() => { loadData() }, [month, store.id])
 
   async function loadData() {
     setLoading(true)
     const supabase = createClient()
+    const [year, m] = month.split('-').map(Number)
     const startOfMonth = `${month}-01`
-    const endOfMonth = new Date(parseInt(month.split('-')[0]), parseInt(month.split('-')[1]), 0).toISOString().split('T')[0]
+    const lastDay = new Date(year, m, 0).getDate()
+    const endOfMonth = `${month}-${String(lastDay).padStart(2, '0')}T23:59:59`
 
     const [revenueRes, expensesRes] = await Promise.all([
       supabase.from('receipts').select('total_amount').eq('store_id', store.id)
-        .gte('created_at', startOfMonth).lte('created_at', endOfMonth + 'T23:59:59')
+        .gte('created_at', startOfMonth).lte('created_at', endOfMonth)
         .neq('payment_type', 'debt'),
-      supabase.from('expenses').select('*').eq('store_id', store.id).eq('month', month).order('created_at', { ascending: false }),
+      supabase.from('monthly_expenses').select('*').eq('store_id', store.id).eq('month', month).maybeSingle(),
     ])
 
     const rev = (revenueRes.data || []).reduce((s: number, r: any) => s + r.total_amount, 0)
     setRevenue(rev)
-    setExpenses(expensesRes.data || [])
+    if (expensesRes.data) {
+      setExpenses({
+        id: expensesRes.data.id,
+        utilities: expensesRes.data.utilities || 0,
+        salary: expensesRes.data.salary || 0,
+        rent: expensesRes.data.rent || 0,
+        other: expensesRes.data.other || 0,
+      })
+    } else {
+      setExpenses(DEFAULT_EXPENSES)
+    }
     setLoading(false)
   }
 
-  async function addExpense() {
-    if (!newName.trim() || !newAmount || isNaN(Number(newAmount))) return
-    setAdding(true)
+  async function saveExpenses() {
+    setSaving(true)
     const supabase = createClient()
-    const { data } = await supabase.from('expenses').insert({ store_id: store.id, name: newName.trim(), amount: Number(newAmount), month }).select().single()
-    if (data) setExpenses(prev => [data, ...prev])
-    setNewName(''); setNewAmount('')
-    setAdding(false)
+    const payload = { store_id: store.id, month, utilities: expenses.utilities, salary: expenses.salary, rent: expenses.rent, other: expenses.other }
+    if (expenses.id) {
+      await supabase.from('monthly_expenses').update(payload).eq('id', expenses.id)
+    } else {
+      const { data } = await supabase.from('monthly_expenses').insert(payload).select().single()
+      if (data) setExpenses(prev => ({ ...prev, id: data.id }))
+    }
+    setSaving(false)
+    setSaveSuccess(true)
+    setTimeout(() => setSaveSuccess(false), 2000)
   }
 
-  async function deleteExpense(id: string) {
-    const supabase = createClient()
-    await supabase.from('expenses').delete().eq('id', id)
-    setExpenses(prev => prev.filter(e => e.id !== id))
-  }
-
-  const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0)
+  const totalExpenses = expenses.utilities + expenses.salary + expenses.rent + expenses.other
   const netProfit = revenue - totalExpenses
+
+  const expenseRows = [
+    { key: 'utilities' as const, icon: '💡', label: lang === 'kz' ? 'Свет, су, ком. қызметтер' : 'Свет, вода, ком. услуги' },
+    { key: 'salary'    as const, icon: '👷', label: lang === 'kz' ? 'Жалақы'                   : 'Заработная плата' },
+    { key: 'rent'      as const, icon: '🏠', label: lang === 'kz' ? 'Жалдау ақысы'             : 'Аренда' },
+    { key: 'other'     as const, icon: '📋', label: lang === 'kz' ? 'Басқа шығындар'            : 'Другие расходы' },
+  ]
 
   const monthLabel = new Date(month + '-01').toLocaleDateString(lang === 'kz' ? 'kk-KZ' : 'ru-RU', { month: 'long', year: 'numeric' })
 
@@ -72,78 +97,81 @@ export default function ProfitPage() {
         <input type="month" value={month} onChange={e => setMonth(e.target.value)} style={{ fontWeight: 600 }} />
       </div>
 
-      {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
-        <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
-          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{lang === 'kz' ? 'Түсім' : 'Выручка'}</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--primary)' }}>{revenue.toLocaleString()} ₸</div>
+      {loading ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[1,2,3].map(i => <div key={i} className="skeleton" style={{ height: 80, borderRadius: 16 }} />)}
         </div>
-        <div className="card" style={{ textAlign: 'center', padding: '16px 12px' }}>
-          <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 4 }}>{lang === 'kz' ? 'Шығын' : 'Расходы'}</div>
-          <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--danger)' }}>{totalExpenses.toLocaleString()} ₸</div>
-        </div>
-      </div>
-
-      {/* Net profit */}
-      <div className="card" style={{ marginBottom: 16, background: netProfit >= 0 ? 'var(--primary)' : 'var(--danger)', border: 'none' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginBottom: 4 }}>
-            {lang === 'kz' ? 'Таза пайда' : 'Чистая прибыль'} · {monthLabel}
-          </div>
-          <div style={{ fontSize: 32, fontWeight: 900, color: '#fff', letterSpacing: -1 }}>
-            {netProfit >= 0 ? '+' : ''}{netProfit.toLocaleString()} ₸
-          </div>
-        </div>
-      </div>
-
-      {/* Add expense */}
-      <div className="card" style={{ marginBottom: 12 }}>
-        <div className="section-title">{lang === 'kz' ? 'Шығын қосу' : 'Добавить расход'}</div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            placeholder={lang === 'kz' ? 'Атауы (су, свет...)' : 'Название (вода, свет...)'}
-            value={newName} onChange={e => setNewName(e.target.value)}
-            style={{ flex: 2 }}
-          />
-          <input
-            type="number" placeholder="₸" value={newAmount}
-            onChange={e => setNewAmount(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && addExpense()}
-            style={{ flex: 1 }}
-          />
-          <button className="btn btn-primary" onClick={addExpense} disabled={adding} style={{ flexShrink: 0, padding: '0 16px' }}>
-            +
-          </button>
-        </div>
-      </div>
-
-      {/* Expenses list */}
-      <div className="card">
-        <div className="section-title">{lang === 'kz' ? 'Шығындар тізімі' : 'Список расходов'}</div>
-        {loading ? (
-          <p style={{ color: 'var(--muted)', fontSize: 14 }}>...</p>
-        ) : expenses.length === 0 ? (
-          <p style={{ color: 'var(--muted)', fontSize: 14, textAlign: 'center', padding: '16px 0' }}>
-            {lang === 'kz' ? 'Шығын жоқ' : 'Расходов нет'}
-          </p>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {expenses.map(e => (
-              <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: 'var(--text)' }}>{e.name}</div>
-                </div>
-                <div style={{ fontWeight: 700, fontSize: 16, color: 'var(--danger)' }}>-{e.amount.toLocaleString()} ₸</div>
-                <button onClick={() => deleteExpense(e.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 18, padding: '0 4px', lineHeight: 1 }}>×</button>
+      ) : (
+        <>
+          {/* Revenue */}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4 }}>{lang === 'kz' ? '📈 Түсім (сатылым)' : '📈 Выручка (продажи)'}</div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: 'var(--primary)' }}>{revenue.toLocaleString()} ₸</div>
               </div>
-            ))}
-            <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 8, fontWeight: 700, fontSize: 15, color: 'var(--text)' }}>
-              <span>{lang === 'kz' ? 'Барлығы' : 'Итого'}</span>
-              <span style={{ color: 'var(--danger)' }}>{totalExpenses.toLocaleString()} ₸</span>
+              <div style={{ width: 50, height: 50, borderRadius: 14, background: 'var(--primary-light)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24 }}>💰</div>
             </div>
           </div>
-        )}
-      </div>
+
+          {/* Expense categories */}
+          <div className="card" style={{ marginBottom: 12 }}>
+            <div className="section-title">📉 {lang === 'kz' ? 'Шығындар' : 'Расходы'}</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {expenseRows.map(row => (
+                <div key={row.key}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                    <span style={{ fontSize: 18 }}>{row.icon}</span>
+                    <label style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)' }}>{row.label}</label>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input
+                      type="number"
+                      min="0"
+                      placeholder="0"
+                      value={expenses[row.key] === 0 ? '' : expenses[row.key]}
+                      onChange={e => setExpenses(prev => ({ ...prev, [row.key]: Number(e.target.value) || 0 }))}
+                      style={{ flex: 1 }}
+                    />
+                    <span style={{ color: 'var(--muted)', fontWeight: 600, fontSize: 15, minWidth: 16 }}>₸</span>
+                  </div>
+                </div>
+              ))}
+
+              {/* Total expenses */}
+              <div style={{ borderTop: '1px solid var(--border)', paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{lang === 'kz' ? 'Жалпы шығын' : 'Итого расходов'}</span>
+                <span style={{ fontSize: 18, fontWeight: 800, color: 'var(--danger)' }}>{totalExpenses.toLocaleString()} ₸</span>
+              </div>
+
+              {saveSuccess && <p style={{ color: 'var(--primary)', fontSize: 13, margin: 0 }}>✓ {lang === 'kz' ? 'Сақталды!' : 'Сохранено!'}</p>}
+              <button className="btn btn-primary" onClick={saveExpenses} disabled={saving}>
+                {saving ? (lang === 'kz' ? 'Сақталуда...' : 'Сохранение...') : (lang === 'kz' ? 'Сақтау' : 'Сохранить')}
+              </button>
+            </div>
+          </div>
+
+          {/* Net profit */}
+          <div style={{
+            borderRadius: 20, padding: '24px 20px', marginBottom: 8,
+            background: netProfit >= 0 ? 'var(--primary)' : 'var(--danger)',
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.75)', marginBottom: 8 }}>
+                {lang === 'kz' ? 'Таза пайда' : 'Чистая прибыль'} · {monthLabel}
+              </div>
+              <div style={{ fontSize: 38, fontWeight: 900, color: '#fff', letterSpacing: -1.5 }}>
+                {netProfit >= 0 ? '+' : ''}{netProfit.toLocaleString()} ₸
+              </div>
+              <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.65)', marginTop: 12, display: 'flex', justifyContent: 'center', gap: 20 }}>
+                <span>{lang === 'kz' ? 'Түсім:' : 'Выручка:'} {revenue.toLocaleString()} ₸</span>
+                <span>−</span>
+                <span>{lang === 'kz' ? 'Шығын:' : 'Расходы:'} {totalExpenses.toLocaleString()} ₸</span>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }
