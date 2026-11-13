@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import TapFeedback from '@/lib/TapFeedback'
 
 export const metadata: Metadata = {
   title: 'Дүкен кассасы',
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="kk">
-      <body>{children}</body>
+      <body>{children}<TapFeedback /></body>
     </html>
   )
 }

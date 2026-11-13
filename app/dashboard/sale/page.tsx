@@ -5,9 +5,10 @@ import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
 import { useCountUp } from '@/lib/useCountUp'
 import { usePullToRefresh } from '@/lib/usePullToRefresh'
+import { productPhoto } from '@/lib/productPhotos'
 import { openCamera, startDetector, playScanSound, unlockScanSound, refocus } from '@/lib/scanner'
 
-type Product = { id: string; name: string; price: number; quantity: number; unit?: string; category?: string; barcode?: string; expiry_date?: string }
+type Product = { id: string; name: string; price: number; quantity: number; unit?: string; category?: string; barcode?: string; expiry_date?: string; image_url?: string | null }
 type CartItem = { product: Product; qty: number; amount: number }
 
 const CATEGORIES = [
@@ -656,10 +657,18 @@ export default function SalePage() {
                   <span key={r.id} className="ripple-wave" style={{ left: r.x, top: r.y }} />
                 ))}
                 {expired && (
-                  <div style={{ position: 'absolute', top: 4, right: 4, fontSize: 10, background: 'var(--danger)', color: '#fff', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>
+                  <div style={{ position: 'absolute', zIndex: 2, top: 4, right: 4, fontSize: 10, background: 'var(--danger)', color: '#fff', borderRadius: 4, padding: '1px 5px', fontWeight: 700 }}>
                     {lang === 'kz' ? 'ӨТТІ' : 'ПРОСРОЧЕНО'}
                   </div>
                 )}
+                {(() => {
+                  const catImg = CATEGORIES.find(c => c.key === p.category)?.img || CATEGORIES[9].img
+                  return (
+                    <img src={productPhoto(p, catImg)} alt="" loading="lazy" draggable={false}
+                      onError={e => { const img = e.target as HTMLImageElement; if (img.src !== catImg) img.src = catImg }}
+                      style={{ width: '100%', aspectRatio: '4 / 3', objectFit: 'cover', borderRadius: 10, marginBottom: 8, display: 'block', background: 'var(--surface)', filter: expired ? 'grayscale(1)' : 'none', boxShadow: '0 6px 14px rgba(0,0,0,0.14)' }} />
+                  )
+                })()}
                 <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 5, color: expired ? 'var(--danger)' : 'var(--text)' }}>{p.name}</div>
                 <div style={{ fontSize: 13, color: expired ? 'var(--muted)' : 'var(--accent)', fontWeight: 700 }}>{p.price.toLocaleString()} ₸</div>
                 <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 1 }}>/{p.unit || 'шт'}</div>

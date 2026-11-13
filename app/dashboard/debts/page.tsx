@@ -34,6 +34,9 @@ export default function DebtsPage() {
 
   async function loadDebts() {
     const supabase = createClient()
+    // Paid debts older than 30 days are removed (backup for the daily DB job).
+    const cutoff = new Date(Date.now() - 30 * 86400000).toISOString()
+    await supabase.from('debts').delete().eq('store_id', store.id).eq('is_paid', true).lt('paid_at', cutoff)
     const { data } = await supabase.from('debts').select('*')
       .eq('store_id', store.id).order('created_at', { ascending: false })
     setDebts(data || [])
