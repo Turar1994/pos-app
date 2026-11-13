@@ -14,19 +14,26 @@
   --danger: #EF4444;
   --danger-light: #FEE2E2;
 
-  --bg: #F8FAFC;
-  --card-bg: #FFFFFF;
-  --surface: #F1F5F9;
+  --bg: transparent;
+  --mesh:
+    radial-gradient(circle at 12% 8%, rgba(167,139,250,0.55) 0, transparent 42%),
+    radial-gradient(circle at 92% 30%, rgba(34,211,238,0.45) 0, transparent 42%),
+    radial-gradient(circle at 20% 92%, rgba(52,211,153,0.45) 0, transparent 40%),
+    linear-gradient(160deg, #EEF2FF 0%, #F0FDFA 100%);
+  --card-bg: rgba(255,255,255,0.58);
+  --surface: rgba(255,255,255,0.42);
+  --glass-border: rgba(255,255,255,0.75);
+  --glass-highlight: inset 0 1px 0 rgba(255,255,255,0.9);
 
   --text: #0F172A;
   --text-secondary: #475569;
   --muted: #94A3B8;
 
-  --border: #E2E8F0;
+  --border: rgba(15,23,42,0.10);
 
-  --shadow-sm: 0 1px 3px rgba(15,23,42,0.05), 0 1px 2px rgba(15,23,42,0.03);
-  --shadow: 0 4px 16px rgba(15,23,42,0.08), 0 2px 6px rgba(15,23,42,0.04);
-  --shadow-lg: 0 12px 32px rgba(15,23,42,0.10), 0 4px 12px rgba(15,23,42,0.05);
+  --shadow-sm: 0 8px 20px rgba(76,29,149,0.08), 0 2px 6px rgba(15,23,42,0.05);
+  --shadow: 0 14px 32px rgba(76,29,149,0.12), 0 4px 10px rgba(15,23,42,0.06);
+  --shadow-lg: 0 24px 48px rgba(76,29,149,0.18), 0 8px 16px rgba(15,23,42,0.08);
 
   --radius: 20px;
   --radius-sm: 14px;
@@ -57,6 +64,30 @@
   border-top: 1px solid var(--border);
 }
 
+/* ===================== GLASS 3D ===================== */
+
+[data-theme] { position: relative; isolation: isolate; }
+[data-theme]::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--mesh);
+  pointer-events: none;
+}
+
+.app-header, .app-nav, .card, .stat-card, .sheet-body, .btn:not(.btn-primary):not(.btn-success),
+input, select, textarea,
+[style*="var(--card-bg)"], [style*="var(--surface)"] {
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+}
+
+.app-header, .app-nav {
+  background: var(--card-bg) !important;
+  border-color: var(--glass-border) !important;
+}
+
 /* ===================== DARK THEME ===================== */
 
 [data-theme="dark"],
@@ -74,19 +105,26 @@
   --danger: #F87171;
   --danger-light: rgba(248, 113, 113, 0.14);
 
-  --bg: #0F172A;
-  --card-bg: #1E293B;
-  --surface: #283548;
+  --bg: transparent;
+  --mesh:
+    radial-gradient(circle at 15% 6%, rgba(124,58,237,0.75) 0, transparent 45%),
+    radial-gradient(circle at 95% 38%, rgba(6,182,212,0.6) 0, transparent 45%),
+    radial-gradient(circle at 25% 95%, rgba(16,185,129,0.55) 0, transparent 42%),
+    #0B1023;
+  --card-bg: rgba(255,255,255,0.09);
+  --surface: rgba(255,255,255,0.07);
+  --glass-border: rgba(255,255,255,0.18);
+  --glass-highlight: inset 0 1px 0 rgba(255,255,255,0.22);
 
   --text: #F1F5F9;
   --text-secondary: #94A3B8;
   --muted: #64748B;
 
-  --border: #334155;
+  --border: rgba(255,255,255,0.14);
 
-  --shadow-sm: 0 1px 3px rgba(0,0,0,0.35), 0 1px 2px rgba(0,0,0,0.25);
-  --shadow: 0 4px 16px rgba(0,0,0,0.35), 0 2px 6px rgba(0,0,0,0.2);
-  --shadow-lg: 0 12px 32px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.25);
+  --shadow-sm: 0 10px 24px rgba(0,0,0,0.35);
+  --shadow: 0 16px 34px rgba(0,0,0,0.42);
+  --shadow-lg: 0 26px 50px rgba(0,0,0,0.5);
 
   --green: #22C55E;
   --green-light: rgba(34, 197, 94, 0.14);
@@ -96,20 +134,16 @@
   --blue-light: rgba(96, 165, 250, 0.14);
   --red: #F87171;
   --red-light: rgba(248, 113, 113, 0.14);
-  --gray: #283548;
-  --white: #1E293B;
+  --gray: rgba(255,255,255,0.07);
+  --white: rgba(255,255,255,0.09);
 }
 
 /* Dark theme structural overrides */
-[data-theme="dark"] .app-header,
-[data-theme="dark"] .app-nav {
-  background: #1E293B !important;
-  border-color: #334155 !important;
+[data-theme="dark"] .sheet-body {
+  background: rgba(17,24,48,0.88) !important;
 }
 
-[data-theme="dark"] .sheet-body {
-  background: #1E293B !important;
-}
+[data-theme="dark"] option { background: #111830; color: #F1F5F9; }
 
 [data-theme="dark"] .alert {
   background: rgba(245,158,11,0.10) !important;
@@ -118,13 +152,14 @@
 }
 
 [data-theme="dark"] .skeleton {
-  background: linear-gradient(90deg, #1e293b 25%, #283548 50%, #1e293b 75%) !important;
+  background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.12) 50%, rgba(255,255,255,0.05) 75%) !important;
   background-size: 200% 100% !important;
 }
 
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter', sans-serif;
-  background: var(--bg);
+  background: var(--mesh);
+  background-attachment: fixed;
   color: var(--text);
   max-width: 430px;
   margin: 0 auto;
@@ -323,7 +358,7 @@ input::placeholder {
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #f1f5f9 25%, #e8edf3 50%, #f1f5f9 75%);
+  background: linear-gradient(90deg, rgba(255,255,255,0.35) 25%, rgba(255,255,255,0.7) 50%, rgba(255,255,255,0.35) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.6s infinite linear;
   border-radius: var(--radius-xs);
@@ -347,10 +382,18 @@ input::placeholder {
   100% { background-position: 0% 50%; }
 }
 
+@keyframes heroFloat {
+  0%, 100% { transform: perspective(900px) rotateX(5deg) translateY(0); }
+  50%      { transform: perspective(900px) rotateX(5deg) translateY(-3px); }
+}
+
 .hero-wave {
-  background: linear-gradient(-45deg, #15803D, #16A34A, #22C55E, #166534, #16A34A);
+  background: linear-gradient(-45deg, #7C3AED, #4F46E5, #0891B2, #059669, #7C3AED);
   background-size: 400% 400%;
-  animation: waveShift 10s ease infinite;
+  animation: waveShift 12s ease infinite, heroFloat 6s ease-in-out infinite;
+  border: 1px solid rgba(255,255,255,0.35);
+  box-shadow: 0 22px 44px rgba(79,70,229,0.38), inset 0 1px 0 rgba(255,255,255,0.45);
+  transform-origin: center bottom;
 }
 
 /* ===================== PULSE (overdue debts) ===================== */
@@ -719,3 +762,21 @@ input::placeholder {
 .home-stagger > *:nth-child(3) { animation-delay: 120ms; }
 .home-stagger > *:nth-child(4) { animation-delay: 180ms; }
 .home-stagger > *:nth-child(5) { animation-delay: 240ms; }
+
+/* ===================== GLASS 3D OVERRIDES ===================== */
+
+.card, .stat-card {
+  border-color: var(--glass-border);
+  box-shadow: var(--shadow), var(--glass-highlight);
+}
+
+[style*="background: var(--card-bg)"] {
+  box-shadow: var(--shadow-sm), var(--glass-highlight);
+}
+
+.btn-primary, .btn-success, .fab {
+  background: linear-gradient(135deg, #22C55E 0%, #059669 100%);
+  border-color: rgba(255,255,255,0.35);
+  box-shadow: 0 10px 22px rgba(5,150,105,0.38), inset 0 1px 0 rgba(255,255,255,0.45);
+}
+
