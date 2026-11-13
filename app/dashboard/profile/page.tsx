@@ -29,6 +29,9 @@ export default function ProfilePage() {
 
   // Owner password
   const [ownerPwd1, setOwnerPwd1] = useState('')
+  const [ownerOld, setOwnerOld] = useState('')
+  const [ownerIsSet, setOwnerIsSet] = useState(false)
+  useEffect(() => { createClient().rpc('owner_password_is_set', { p_store: store.id }).then(({ data }) => setOwnerIsSet(!!data)) }, [store.id])
   const [ownerPwd2, setOwnerPwd2] = useState('')
   const [ownerPwdSaving, setOwnerPwdSaving] = useState(false)
   const [ownerPwdSuccess, setOwnerPwdSuccess] = useState('')
@@ -113,9 +116,10 @@ export default function ProfilePage() {
     if (ownerPwd1 !== ownerPwd2) { setOwnerPwdError(lang === 'kz' ? 'Парольдер сәйкес емес' : 'Пароли не совпадают'); return }
     if (ownerPwd1.length < 4) { setOwnerPwdError(lang === 'kz' ? 'Кемінде 4 таңба' : 'Минимум 4 символа'); return }
     setOwnerPwdSaving(true); setOwnerPwdError(''); setOwnerPwdSuccess('')
-    const supabase = createClient()
-    await supabase.from('stores').update({ owner_password: ownerPwd1 }).eq('id', store.id)
-    await refreshStore()
+    if (ownerIsSet && !ownerOld) { setOwnerPwdSaving(false); setOwnerPwdError(lang === 'kz' ? 'Ескі парольді енгізіңіз' : 'Введите старый пароль'); return }
+    const { data: ok } = await createClient().rpc('set_owner_password', { p_store: store.id, p_old: ownerIsSet ? ownerOld : null, p_new: ownerPwd1 })
+    if (!ok) { setOwnerPwdSaving(false); setOwnerPwdError(lang === 'kz' ? 'Ескі пароль қате' : 'Старый пароль неверный'); return }
+    setOwnerIsSet(true); setOwnerOld('')
     setOwnerPwd1(''); setOwnerPwd2('')
     setOwnerPwdSaving(false)
     setOwnerPwdSuccess(lang === 'kz' ? 'Пароль өзгертілді!' : 'Пароль изменён!')
@@ -201,10 +205,11 @@ export default function ProfilePage() {
         <div className="section-title">👑 {lang === 'kz' ? 'Иесі паролі' : 'Пароль владельца'}</div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <p style={{ fontSize: 13, color: 'var(--muted)', margin: 0 }}>
-            {store.owner_password
+            {ownerIsSet
               ? (lang === 'kz' ? 'Иесі парольін өзгертіңіз' : 'Изменить пароль владельца')
               : (lang === 'kz' ? 'Иесі паролі белгіленбеген' : 'Пароль владельца не установлен')}
           </p>
+          {ownerIsSet && <input type="password" placeholder={lang === 'kz' ? 'Ескі пароль' : 'Старый пароль'} value={ownerOld} onChange={e => setOwnerOld(e.target.value)} />}
           <input type="password" placeholder={lang === 'kz' ? 'Жаңа пароль' : 'Новый пароль'} value={ownerPwd1} onChange={e => setOwnerPwd1(e.target.value)} />
           <input type="password" placeholder={lang === 'kz' ? 'Қайталаңыз' : 'Повторите'} value={ownerPwd2} onChange={e => setOwnerPwd2(e.target.value)} />
           {ownerPwdError && <p style={{ color: 'var(--danger)', fontSize: 13 }}>{ownerPwdError}</p>}

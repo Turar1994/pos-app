@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase'
 import { t, Lang } from '@/lib/lang'
 import { AppContext } from '@/lib/context'
 
-type Store = { id: string; name: string; kaspi_number?: string; kaspi_qr_url?: string; owner_password?: string }
+type Store = { id: string; name: string; kaspi_number?: string; kaspi_qr_url?: string }
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -105,30 +105,32 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   function selectCashier() { setRole('cashier'); sessionStorage.setItem('role', 'cashier') }
 
-  function selectOwner() {
-    if (!store?.owner_password) { setShowOwnerPwd(true); setSettingPwd(true) }
-    else { setShowOwnerPwd(true); setSettingPwd(false) }
+  // Owner password lives hashed in the DB; only server functions can check or change it.
+  async function selectOwner() {
     setOwnerPwdInput(''); setOwnerPwdError(''); setNewPwd1(''); setNewPwd2('')
+    const { data: isSet } = await createClient().rpc('owner_password_is_set', { p_store: store!.id })
+    setSettingPwd(!isSet); setShowOwnerPwd(true)
   }
 
   async function confirmOwnerPwd() {
+    const supabase = createClient()
     if (settingPwd) {
       if (!newPwd1 || !newPwd2) { setOwnerPwdError(lang === 'kz' ? 'Барлық өрісті толтырыңыз' : 'Заполните все поля'); return }
       if (newPwd1 !== newPwd2) { setOwnerPwdError(lang === 'kz' ? 'Парольдер сәйкес емес' : 'Пароли не совпадают'); return }
       if (newPwd1.length < 4) { setOwnerPwdError(lang === 'kz' ? 'Кемінде 4 таңба' : 'Минимум 4 символа'); return }
-      const supabase = createClient()
-      await supabase.from('stores').update({ owner_password: newPwd1 }).eq('id', store!.id)
-      setStore(prev => prev ? { ...prev, owner_password: newPwd1 } : prev)
-      setRole('owner'); sessionStorage.setItem('role', 'owner')
-      setShowOwnerPwd(false)
+      const { data: ok } = await supabase.rpc('set_owner_password', { p_store: store!.id, p_old: null, p_new: newPwd1 })
+      if (!ok) { setOwnerPwdError(lang === 'kz' ? 'Қате, қайталаңыз' : 'Ошибка, попробуйте ещё раз'); return }
     } else {
-      if (ownerPwdInput !== store?.owner_password) {
-        setOwnerPwdError(lang === 'kz' ? 'Пароль қате' : 'Неверный пароль')
+      const { data: res } = await supabase.rpc('check_owner_password', { p_store: store!.id, p_pwd: ownerPwdInput })
+      if (res !== 'ok') {
+        setOwnerPwdError(res === 'locked'
+          ? (lang === 'kz' ? 'Тым көп қате әрекет. 5 минуттан кейін көріңіз.' : 'Слишком много попыток. Подождите 5 минут.')
+          : (lang === 'kz' ? 'Пароль қате' : 'Неверный пароль'))
         return
       }
-      setRole('owner'); sessionStorage.setItem('role', 'owner')
-      setShowOwnerPwd(false)
     }
+    setRole('owner'); sessionStorage.setItem('role', 'owner')
+    setShowOwnerPwd(false)
   }
 
   function switchRole() { setRole(null); sessionStorage.removeItem('role') }
