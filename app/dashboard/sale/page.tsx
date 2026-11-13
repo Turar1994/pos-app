@@ -5,6 +5,7 @@ import { useApp } from '@/lib/context'
 import { t } from '@/lib/lang'
 import { useCountUp } from '@/lib/useCountUp'
 import { usePullToRefresh } from '@/lib/usePullToRefresh'
+import { openCamera, startDetector, playScanSound, unlockScanSound, refocus } from '@/lib/scanner'
 
 type Product = { id: string; name: string; price: number; quantity: number; unit?: string; category?: string; barcode?: string; expiry_date?: string }
 type CartItem = { product: Product; qty: number; amount: number }
@@ -62,9 +63,6 @@ export default function SalePage() {
   const streamRef = useRef<MediaStream | null>(null)
   const readerRef = useRef<any>(null)
   const productsRef = useRef<Product[]>([])
-  const lastScannedRef = useRef<string>('')
-  const lastTimeRef = useRef<number>(0)
-  const audioCtxRef = useRef<any>(null)
   const hintTimerRef = useRef<any>(null)
   const scanningRef = useRef(false)
 
@@ -89,140 +87,33 @@ export default function SalePage() {
 
   async function loadProducts() { await loadData() }
 
-  function unlockAudio() {
-    try {
-      if (audioCtxRef.current) return
-      const AC = window.AudioContext || (window as any).webkitAudioContext
-      if (!AC) return
-      audioCtxRef.current = new AC()
-      const buf = audioCtxRef.current.createBuffer(1, 1, 22050)
-      const src = audioCtxRef.current.createBufferSource()
-      src.buffer = buf
-      src.connect(audioCtxRef.current.destination)
-      src.start(0)
-    } catch (e) {}
-  }
-
-  function playBeep(ok = true) {
-    try {
-      const AC = window.AudioContext || (window as any).webkitAudioContext
-      const ctx = audioCtxRef.current || (AC ? new AC() : null)
-      if (!ctx) return
-      audioCtxRef.current = ctx
-      if (ctx.state === 'suspended') ctx.resume()
-      if (ok) {
-        [0, 0.14].forEach((d, i) => {
-          const o = ctx.createOscillator(), g = ctx.createGain()
-          o.connect(g); g.connect(ctx.destination)
-          o.frequency.value = i === 0 ? 1200 : 1600
-          o.type = 'sine'
-          g.gain.setValueAtTime(0.5, ctx.currentTime + d)
-          g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + d + 0.13)
-          o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + 0.13)
-        })
-      } else {
-        const o = ctx.createOscillator(), g = ctx.createGain()
-        o.connect(g); g.connect(ctx.destination)
-        o.frequency.value = 300; o.type = 'sine'
-        g.gain.setValueAtTime(0.5, ctx.currentTime)
-        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
-        o.start(ctx.currentTime); o.stop(ctx.currentTime + 0.35)
-      }
-    } catch (e) {}
-  }
+  function playBeep(ok = true) { playScanSound(ok) }
 
   async function startScanner() {
-    unlockAudio()
+    unlockScanSound()
     setScanning(true)
     scanningRef.current = true
     setScanMsg('')
     setScanSuccess(false)
     setHint(0)
-    lastScannedRef.current = ''
-
     hintTimerRef.current = setTimeout(() => setHint(1), 8000)
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
-        }
-      })
-
-      const track = stream.getVideoTracks()[0]
-      try {
-        await (track as any).applyConstraints({
-          advanced: [{ focusMode: 'continuous' }]
-        })
-      } catch (e) {}
-
+      const stream = await openCamera(videoRef.current!)
       streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
-
-      // Native BarcodeDetector (Chrome Android) — аппараттық жеделдету, лазер жылдамдығы
-      if ('BarcodeDetector' in window) {
-        let detector: any
-        try {
-          detector = new (window as any).BarcodeDetector({
-            formats: ['ean_13', 'ean_8', 'code_128', 'upc_a', 'upc_e', 'code_39', 'code_93', 'qr_code', 'pdf417', 'data_matrix', 'aztec', 'itf']
-          })
-        } catch {
-          detector = new (window as any).BarcodeDetector()
-        }
-        const scan = async () => {
-          if (!scanningRef.current) return
-          try {
-            const barcodes = await detector.detect(videoRef.current!)
-            if (barcodes.length > 0) {
-              const code = barcodes[0].rawValue
-              const now = Date.now()
-              if (code === lastScannedRef.current && now - lastTimeRef.current < 1500) {
-                requestAnimationFrame(scan); return
-              }
-              lastScannedRef.current = code
-              lastTimeRef.current = now
-              handleBarcode(code)
-              return
-            }
-          } catch {}
-          requestAnimationFrame(scan)
-        }
-        requestAnimationFrame(scan)
-      } else {
-        // ZXing fallback
-        const { BrowserMultiFormatReader } = await import('@zxing/library')
-        const reader = new BrowserMultiFormatReader()
-        readerRef.current = reader
-        reader.decodeFromStream(stream, videoRef.current!, (result) => {
-          if (!scanningRef.current || !result) return
-          const code = result.getText()
-          const now = Date.now()
-          if (code === lastScannedRef.current && now - lastTimeRef.current < 1500) return
-          lastScannedRef.current = code
-          lastTimeRef.current = now
-          handleBarcode(code)
-        })
-      }
-
+      readerRef.current = await startDetector(videoRef.current!, stream, code => {
+        if (scanningRef.current) handleBarcode(code)
+      })
     } catch (e) {
       setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
       setScanning(false)
+      scanningRef.current = false
     }
   }
 
   function stopScanner() {
     scanningRef.current = false
     if (hintTimerRef.current) { clearTimeout(hintTimerRef.current); hintTimerRef.current = null }
-    if (readerRef.current) {
-      try { readerRef.current.reset() } catch (e) {}
-      readerRef.current = null
-    }
+    if (readerRef.current) { readerRef.current.stop(); readerRef.current = null }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop())
       streamRef.current = null
@@ -232,7 +123,6 @@ export default function SalePage() {
     setScanSuccess(false)
     setTorchOn(false)
     setHint(0)
-    lastScannedRef.current = ''
   }
 
   async function toggleTorch() {
@@ -254,7 +144,6 @@ export default function SalePage() {
     if (!product) {
       setScanMsg(lang === 'kz' ? `Табылмады: ${code}` : `Не найден: ${code}`)
       setScanSuccess(false)
-      if (navigator.vibrate) navigator.vibrate([100, 50, 100])
       playBeep(false)
       setTimeout(() => setScanMsg(''), 2000)
       return
@@ -262,7 +151,6 @@ export default function SalePage() {
     if (isExpired(product)) {
       setScanMsg(lang === 'kz' ? `❌ Мерзімі өтті: ${product.name}` : `❌ Просрочено: ${product.name}`)
       setScanSuccess(false)
-      if (navigator.vibrate) navigator.vibrate([100, 50, 100])
       playBeep(false)
       setTimeout(() => setScanMsg(''), 2500)
       return
@@ -283,7 +171,6 @@ export default function SalePage() {
     })
     setScanMsg(`✅ ${product.name}`)
     setScanSuccess(true)
-    if (navigator.vibrate) navigator.vibrate(60)
     playBeep(true)
     setTimeout(() => { setScanMsg(''); setScanSuccess(false) }, 1200)
   }
@@ -564,7 +451,7 @@ export default function SalePage() {
               0%,100% { opacity:1; } 50% { opacity:0.5; }
             }
           `}</style>
-          <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
+          <video ref={videoRef} onClick={() => refocus(streamRef.current)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
 
           {/* Dark overlay с прозрачным окном */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>

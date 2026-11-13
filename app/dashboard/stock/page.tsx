@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
+import { openCamera, startDetector, playScanSound, unlockScanSound, refocus } from '@/lib/scanner'
 import { t } from '@/lib/lang'
 import { usePullToRefresh } from '@/lib/usePullToRefresh'
 
@@ -245,8 +246,6 @@ export default function StockPage() {
   const streamRef = useRef<MediaStream | null>(null)
   const readerRef = useRef<any>(null)
   const scanningRef = useRef(false)
-  const lastScannedRef = useRef('')
-  const lastTimeRef = useRef(0)
 
   // Form field refs for auto-advance
   const nameRef     = useRef<HTMLInputElement>(null)
@@ -338,75 +337,29 @@ export default function StockPage() {
   }
 
   async function startScanner() {
+    unlockScanSound()
     setScanning(true)
     scanningRef.current = true
     setScanMsg('')
-    lastScannedRef.current = ''
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: { ideal: 'environment' },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-          frameRate: { ideal: 30 },
-        }
-      })
-      const track = stream.getVideoTracks()[0]
-      try {
-        await (track as any).applyConstraints({ advanced: [{ focusMode: 'continuous' }] })
-      } catch {}
-
+      const stream = await openCamera(videoRef.current!)
       streamRef.current = stream
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream
-        await videoRef.current.play()
-      }
-
-      const onCode = (code: string) => {
-        const now = Date.now()
-        if (code === lastScannedRef.current && now - lastTimeRef.current < 1500) return
-        lastScannedRef.current = code
-        lastTimeRef.current = now
+      readerRef.current = await startDetector(videoRef.current!, stream, code => {
+        if (!scanningRef.current) return
         setForm(prev => ({ ...prev, barcode: code }))
-        if (navigator.vibrate) navigator.vibrate([60, 30, 60])
+        playScanSound(true)
         stopScanner()
-      }
-
-      if ('BarcodeDetector' in window) {
-        let detector: any
-        try { detector = new (window as any).BarcodeDetector({ formats: ['ean_13','ean_8','code_128','upc_a','upc_e','code_39','code_93','qr_code','pdf417','data_matrix','aztec','itf'] }) }
-        catch { detector = new (window as any).BarcodeDetector() }
-        const scan = async () => {
-          if (!scanningRef.current) return
-          try {
-            const barcodes = await detector.detect(videoRef.current!)
-            if (barcodes.length > 0) { onCode(barcodes[0].rawValue); return }
-          } catch {}
-          requestAnimationFrame(scan)
-        }
-        requestAnimationFrame(scan)
-      } else {
-        const { BrowserMultiFormatReader } = await import('@zxing/library')
-        const reader = new BrowserMultiFormatReader()
-        readerRef.current = reader
-        reader.decodeFromStream(stream, videoRef.current!, (result) => {
-          if (!scanningRef.current || !result) return
-          onCode(result.getText())
-        })
-      }
+      })
     } catch {
       setScanMsg(lang === 'kz' ? 'Камераға рұқсат жоқ' : 'Нет доступа к камере')
       setScanning(false)
+      scanningRef.current = false
     }
   }
 
   function stopScanner() {
     scanningRef.current = false
-    if (readerRef.current) {
-      try { readerRef.current.reset() } catch (e) {}
-      readerRef.current = null
-    }
+    if (readerRef.current) { readerRef.current.stop(); readerRef.current = null }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop())
       streamRef.current = null
@@ -414,6 +367,7 @@ export default function StockPage() {
     setScanning(false)
     setScanMsg('')
   }
+
 
   function getExpiryStatus(expiry?: string) {
     if (!expiry) return null
@@ -456,7 +410,7 @@ export default function StockPage() {
               100% { top: 4px;  opacity: 1; }
             }
           `}</style>
-          <video ref={videoRef} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
+          <video ref={videoRef} onClick={() => refocus(streamRef.current)} style={{ width: '100%', height: '100%', objectFit: 'cover' }} playsInline muted />
 
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
             <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 'calc(50% + 70px)', background: 'rgba(0,0,0,0.6)' }} />
