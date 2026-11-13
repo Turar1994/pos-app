@@ -313,7 +313,7 @@ export default function StockPage() {
     scanningRef.current = true
     setScanMsg('')
     try {
-      const stream = await openCamera(videoRef.current!)
+      const stream = await openCamera(() => videoRef.current)
       streamRef.current = stream
       readerRef.current = await startDetector(videoRef.current!, stream, code => {
         if (!scanningRef.current) return

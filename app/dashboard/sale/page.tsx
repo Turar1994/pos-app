@@ -99,7 +99,7 @@ export default function SalePage() {
     setHint(0)
     hintTimerRef.current = setTimeout(() => setHint(1), 8000)
     try {
-      const stream = await openCamera(videoRef.current!)
+      const stream = await openCamera(() => videoRef.current)
       streamRef.current = stream
       readerRef.current = await startDetector(videoRef.current!, stream, code => {
         if (scanningRef.current) handleBarcode(code)

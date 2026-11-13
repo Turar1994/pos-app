@@ -50,7 +50,8 @@ export function playScanSound(ok: boolean) {
   if (navigator.vibrate) navigator.vibrate(ok ? 70 : [120, 60, 120])
 }
 
-export async function openCamera(video: HTMLVideoElement): Promise<MediaStream> {
+// Takes a getter because the <video> is only mounted after the scanner opens.
+export async function openCamera(getVideo: () => HTMLVideoElement | null): Promise<MediaStream> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: false,
     video: {
@@ -71,6 +72,12 @@ export async function openCamera(video: HTMLVideoElement): Promise<MediaStream> 
   if (Object.keys(adv).length) {
     try { await (track as any).applyConstraints({ advanced: [adv] }) } catch {}
   }
+  let video = getVideo()
+  for (let i = 0; !video && i < 60; i++) {
+    await new Promise(r => requestAnimationFrame(r))
+    video = getVideo()
+  }
+  if (!video) { stream.getTracks().forEach(t => t.stop()); throw new Error('video element not mounted') }
   video.srcObject = stream
   video.setAttribute('playsinline', 'true')
   video.muted = true
