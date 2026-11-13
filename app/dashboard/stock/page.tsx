@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase'
 import { useApp } from '@/lib/context'
 import { productPhoto, lookupBarcodePhoto, uploadProductPhoto } from '@/lib/productPhotos'
@@ -433,8 +434,8 @@ export default function StockPage() {
       )}
 
       {/* Стандартты тізім модалы */}
-      {showSeed && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 200, display: 'flex', alignItems: 'flex-end' }}>
+      {showSeed && createPortal(
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', zIndex: 3000, display: 'flex', alignItems: 'flex-end', backdropFilter: 'none' }} onClick={e => { if (e.target === e.currentTarget) setShowSeed(false) }}>
           <div style={{ background: 'var(--card-bg)', borderRadius: '20px 20px 0 0', width: '100%', maxHeight: '80vh', overflow: 'auto', padding: '20px 16px 32px' }}>
             <div style={{ width: 40, height: 4, background: 'var(--border)', borderRadius: 99, margin: '0 auto 16px' }} />
             <div style={{ fontWeight: 700, fontSize: 17, marginBottom: 4 }}>
@@ -491,7 +492,7 @@ export default function StockPage() {
             </div>
           </div>
         </div>
-      )}
+      , (document.querySelector('[data-theme]') as HTMLElement) || document.body)}
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
         <input placeholder={lang === 'kz' ? '🔍 Товар іздеу...' : '🔍 Поиск товара...'}

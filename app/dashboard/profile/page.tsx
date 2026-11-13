@@ -7,7 +7,7 @@ import { t } from '@/lib/lang'
 type Profile = { full_name: string; phone: string; birth_date: string; store_name: string; address: string }
 
 export default function ProfilePage() {
-  const { lang, store, refreshStore } = useApp()
+  const { lang, store, refreshStore, subEnd } = useApp()
   const T = t[lang]
   const [profile, setProfile] = useState<Profile>({ full_name: '', phone: '', birth_date: '', store_name: '', address: '' })
   const [loading, setLoading] = useState(true)
@@ -127,6 +127,13 @@ export default function ProfilePage() {
   return (
     <div>
       <h2 style={{ fontSize: 18, fontWeight: 600, marginBottom: 16 }}>{lang === 'kz' ? 'Жеке кабинет' : 'Личный кабинет'}</h2>
+
+      <div className="card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontWeight: 600 }}>📅 {lang === 'kz' ? 'Подписка мерзімі' : 'Подписка до'}</div>
+        <div style={{ fontWeight: 700, color: subEnd && (new Date(subEnd).getTime() - Date.now()) / 86400000 <= 7 ? 'var(--warning)' : 'var(--primary)' }}>
+          {subEnd ? new Date(subEnd).toLocaleDateString('ru-RU') : (lang === 'kz' ? 'Белгіленбеген' : 'Не указана')}
+        </div>
+      </div>
 
       <div className="card">
         <div className="section-title">{lang === 'kz' ? 'Жеке мәліметтер' : 'Личные данные'}</div>

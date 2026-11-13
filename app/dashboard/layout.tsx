@@ -18,6 +18,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const [refresh, setRefresh] = useState(0)
   const T = t[lang]
   const [blocked, setBlocked] = useState<string | null>(null)
+  const [subEnd, setSubEnd] = useState<string | null>(null)
 
   // Role system
   const [role, setRole] = useState<'cashier' | 'owner' | null>(null)
@@ -52,6 +53,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       .select('status, subscription_end, deleted_at')
       .eq('email', session.user.email!)
       .maybeSingle()
+    setSubEnd(client?.subscription_end || null)
     if (!client || client.deleted_at) { await supabase.auth.signOut(); router.replace('/auth'); return }
     if (client.status === 'blocked') {
       setBlocked(lang === 'kz' ? 'Аккаунтыңыз блокталған. Байланысыңыз: turar.toreniyazov@gmail.com' : 'Аккаунт заблокирован. Свяжитесь: turar.toreniyazov@gmail.com')
@@ -273,7 +275,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const tabs = role === 'cashier' ? cashierTabs : ownerTabs
 
   return (
-    <AppContext.Provider value={{ store, lang, setLang: changeLang, theme, setTheme, refresh, triggerRefresh: () => setRefresh(r => r + 1), role, refreshStore }}>
+    <AppContext.Provider value={{ store, lang, setLang: changeLang, theme, setTheme, refresh, triggerRefresh: () => setRefresh(r => r + 1), role, refreshStore, subEnd }}>
       <div data-theme={theme} style={{ paddingBottom: 74, minHeight: '100vh', background: 'var(--bg)' }}>
         {/* Header */}
         <div className="app-header" style={{ padding: '12px 16px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', boxShadow: '0 1px 8px rgba(15,23,42,0.05)', position: 'sticky', top: 0, zIndex: 50 }}>
@@ -304,6 +306,19 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
         </div>
 
         <div key={pathname} style={{ padding: '14px 14px 0' }} className="anim-page-in">
+          {(() => {
+            if (!subEnd) return null
+            const days = Math.ceil((new Date(subEnd).getTime() - Date.now()) / 86400000)
+            if (days > 7 || days < 0) return null
+            const d = new Date(subEnd).toLocaleDateString('ru-RU')
+            return (
+              <div className="alert" style={{ marginBottom: 12, background: 'var(--warning-light)', color: 'var(--warning)', border: '1px solid var(--warning)', borderRadius: 12, padding: '10px 12px', fontSize: 13, fontWeight: 600 }}>
+                ⏳ {lang === 'kz'
+                  ? `Подписка мерзімі жақында бітеді: ${d} (${days} күн қалды). Ұзарту үшін байланысыңыз.`
+                  : `Подписка скоро закончится: ${d} (осталось ${days} дн.). Свяжитесь для продления.`}
+              </div>
+            )
+          })()}
           {children}
         </div>
 

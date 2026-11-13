@@ -40,9 +40,19 @@ export default function AuthPage() {
     if (!loginPhone || !loginPassword) { setError(T.fillAll); return }
     setLoading(true); setError('')
     const supabase = createClient()
-    const email = phoneToEmail(loginPhone)
-
-    const { data, error: authError } = await supabase.auth.signInWithPassword({ email, password: loginPassword })
+    // Spaces, "+", 8/7 prefix all accepted; older accounts may be stored in another format, so try variants.
+    const digits = loginPhone.replace(/\D/g, '')
+    const last10 = digits.slice(-10)
+    const candidates = Array.from(new Set([
+      phoneToEmail(loginPhone), `7${last10}@pos.kz`, `8${last10}@pos.kz`, `${last10}@pos.kz`, `${digits}@pos.kz`,
+    ]))
+    let data: any = null, authError: any = null
+    for (const c of candidates) {
+      const r = await supabase.auth.signInWithPassword({ email: c, password: loginPassword })
+      data = r.data; authError = r.error
+      if (!authError && data.session) break
+    }
+    const email = data?.session?.user.email || phoneToEmail(loginPhone)
     if (authError || !data.session) {
       setError(lang === 'kz' ? 'Номер немесе пароль қате' : 'Неверный номер или пароль')
       setLoading(false); return
@@ -137,7 +147,7 @@ export default function AuthPage() {
 
       {isLogin ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input placeholder={lang === 'kz' ? 'Телефон номері (+7...)' : 'Номер телефона (+7...)'}
+          <input type="tel" inputMode="tel" autoComplete="tel" placeholder={lang === 'kz' ? 'Телефон: 8 701 123 45 67' : 'Телефон: 8 701 123 45 67'}
             value={loginPhone} onChange={e => setLoginPhone(e.target.value)} />
           <input type="password" placeholder={T.password}
             value={loginPassword} onChange={e => setLoginPassword(e.target.value)}
@@ -145,7 +155,7 @@ export default function AuthPage() {
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-          <input placeholder={lang === 'kz' ? 'Телефон номері (+7...)' : 'Номер телефона (+7...)'}
+          <input type="tel" inputMode="tel" autoComplete="tel" placeholder={lang === 'kz' ? 'Телефон: 8 701 123 45 67' : 'Телефон: 8 701 123 45 67'}
             value={regPhone} onChange={e => setRegPhone(e.target.value)} />
           <input placeholder={lang === 'kz' ? 'Аты-жөні' : 'ФИО'}
             value={regName} onChange={e => setRegName(e.target.value)} />

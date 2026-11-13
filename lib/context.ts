@@ -13,6 +13,7 @@ export type AppCtx = {
   triggerRefresh: () => void
   role: 'cashier' | 'owner'
   refreshStore: () => void
+  subEnd: string | null
 }
 
 export const AppContext = createContext<AppCtx | null>(null)
